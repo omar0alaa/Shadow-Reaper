@@ -76,8 +76,9 @@ export class CombatSystem {
 
     _calcDamage(player, enemy, w, pulse, fromBehind) {
         let base = w.damage;
-        // combo damage scaling per combo index
-        const comboBonus = (player.stats.combo_damage || 0) * Math.max(0, (pulse.comboIndex || 1) - 1);
+        // Combo bonus: scales with the live infinite combo counter, not the
+        // 1..N swing index. (combo_damage upgrade defaults to 2.5% per stack.)
+        const comboBonus = (player.stats.combo_damage || 0) * (player.comboCount || 0);
         base *= (1 + comboBonus);
         if (pulse.heavy) base *= 1.65;
 
@@ -140,12 +141,16 @@ export class CombatSystem {
         enemy.takeDamage(amount, info);
         const player = this.game.player;
         if (info.fromPlayer && player) {
-            player.incrementCombo();
+            // Bump combo on every direct hit (not on bleed/poison ticks).
+            if (info.source !== 'bleed' && info.source !== 'poison') {
+                player.incrementCombo();
+            }
             this.game.runStats.damage += amount;
             const lifesteal = (player.stats.lifesteal || 0) + WeaponTraits.weaponLifesteal(player.weapon);
             if (lifesteal > 0) player.heal(amount * lifesteal);
             if (info.weapon && WeaponTraits.appliesBleed(info.weapon)) {
-                enemy.applyBleed(3.0, amount * 0.4);
+                const stacks = WeaponTraits.bleedStrong && WeaponTraits.bleedStrong(info.weapon) ? 0.7 : 0.4;
+                enemy.applyBleed(3.0, amount * stacks);
             }
         }
         // Damage numbers
@@ -159,11 +164,25 @@ export class CombatSystem {
         this.game.particles.spawnSparks(pos, info.crit ? '#ffd166' : '#ffeecf', info.crit ? 16 : 8);
     }
 
+    /** Called by Projectile when one of the player's projectiles damages an enemy.
+     *  Routes chain lightning + any class-agnostic on-hit upgrades through
+     *  the same path melee uses. */
+    onProjectileHit(enemy, dmg) {
+        const p = this.game.player;
+        if (!p) return;
+        if ((p.stats.chain_lightning || 0) > 0) {
+            this._chainLightning(enemy, dmg * 0.45, 2);
+        }
+    }
+
     applyDamageToPlayer(amount, source) {
         const p = this.game.player;
         if (!p) return;
         if (p.invuln > 0) return;
         p.takeDamage(amount, source);
+        // Player took damage — break their combo.
+        p.comboCount = 0;
+        p.comboTimeLeft = 0;
         this._hitStop(0.04);
     }
 

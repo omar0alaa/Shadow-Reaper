@@ -1,4 +1,8 @@
-// BladeFlurry — R. 1.5s spin attack, multi-hit. With Phantom Bow, becomes Arrow Storm.
+// R skill — class-driven primary ability.
+//   sword:  Whirlwind   (medium range, balanced spin, slight forward drift)
+//   dagger: Blade Flurry (faster ticks, tighter range, applies bleed if eligible)
+//   bow:    Arrow Storm  (rains arrows in a circle around the player)
+//   scythe: Reaping Spin (wide AoE, lifesteal heal per hit)
 
 import * as THREE from 'three';
 import { WeaponTraits } from '../combat/Weapon.js';
@@ -28,9 +32,10 @@ export class BladeFlurry {
         this.tickAccum = 0;
         this.player.setTrailActive(this.timer + 0.3, this.player._weaponTrailColor());
 
-        // arrow storm variant
-        if (WeaponTraits.bladeFlurryAsArrowStorm(this.player.weapon)) {
+        // BOW class → Arrow Storm
+        if (this.player.weaponClass === 'bow' || WeaponTraits.bladeFlurryAsArrowStorm(this.player.weapon)) {
             const total = 24;
+            const baseDmg = (this.player.weapon?.damage || 20) * 0.7;
             for (let i = 0; i < total; i++) {
                 setTimeout(() => {
                     if (!this.player) return;
@@ -39,14 +44,16 @@ export class BladeFlurry {
                     const start = this.player.position.clone().add(new THREE.Vector3(0, 1.2, 0));
                     const proj = new Projectile(this.game, {
                         origin: start, direction: dir, speed: 26,
-                        damage: this.player.weapon.damage * 0.7, life: 1.6,
+                        damage: baseDmg, life: 1.6,
                         color: this.player.weapon.color || '#9bff9b', size: 0.16,
-                        fromPlayer: true, kind: 'arrow', pierce: false,
+                        fromPlayer: true, kind: 'arrow',
+                        pierce: WeaponTraits.hasPierce(this.player.weapon),
                     });
                     this.game.projectiles.push(proj);
                 }, i * 50);
             }
             this.game.audio.bowShot();
+            this.active = false; // arrow storm is fire-and-forget
             return;
         }
     }
@@ -57,27 +64,36 @@ export class BladeFlurry {
         this.timer -= dt;
 
         const player = this.player;
-        // rotate weapon and arms fast
+        const cls = player.weaponClass || 'sword';
+        const w = player.weapon;
+
+        // Visual spin — varies by class
         const t = performance.now() / 70;
         player.weaponMount.rotation.x = Math.sin(t) * 0.8;
         player.rArm.rotation.x = -1.0 - Math.sin(t * 1.5) * 0.3;
         player.lArm.rotation.x = -0.5 + Math.cos(t * 1.5) * 0.3;
-        player.group.rotation.y += dt * 12; // visible spin
+        const spinSpeed = cls === 'dagger' ? 16 : cls === 'scythe' ? 9 : 12;
+        player.group.rotation.y += dt * spinSpeed;
 
-        // forward drift
+        // Forward drift differs per class
+        const driftSpeed = cls === 'sword' ? 1.8 : cls === 'dagger' ? 2.4 : cls === 'scythe' ? 0.8 : 1.4;
         const fwd = new THREE.Vector3(Math.sin(player.facing), 0, Math.cos(player.facing));
-        player.position.x += fwd.x * 1.4 * dt;
-        player.position.z += fwd.z * 1.4 * dt;
-        const r = this.game.arena.resolveCollision(player.position.x, player.position.z, 0.45);
-        player.position.x = r.x; player.position.z = r.z;
+        player.position.x += fwd.x * driftSpeed * dt;
+        player.position.z += fwd.z * driftSpeed * dt;
+        const cr = this.game.arena.resolveCollision(player.position.x, player.position.z, 0.45);
+        player.position.x = cr.x; player.position.z = cr.z;
 
-        // tick damage every 0.12s in 360° around
+        // Damage tick rate / range / damage / hits varies by class
+        const tickInterval = cls === 'dagger' ? 0.08 : cls === 'scythe' ? 0.16 : 0.12;
         this.tickAccum += dt;
-        if (this.tickAccum > 0.12) {
+        if (this.tickAccum > tickInterval) {
             this.tickAccum = 0;
-            const w = player.weapon;
-            const range = (w?.range || 2.2) + 0.3;
-            const baseDmg = (w?.damage || 18) * 0.45;
+            // Range per class — scythe has the widest sweep
+            const rangeBoost = cls === 'scythe' ? 1.0 : cls === 'sword' ? 0.5 : 0.3;
+            const range = (w?.range || 2.2) + rangeBoost;
+            // Damage per tick
+            const dmgScale = cls === 'dagger' ? 0.32 : cls === 'scythe' ? 0.55 : 0.45;
+            const baseDmg = (w?.damage || 18) * dmgScale;
             const extraHits = WeaponTraits.bonusBladeFlurryHits(w);
             const hits = 1 + Math.floor(extraHits / 6);
 
@@ -90,7 +106,9 @@ export class BladeFlurry {
                 }
                 this.game.combat._hitStop(0.02);
             }
-            this.game.particles.spawnBurst(player.position.clone().add(new THREE.Vector3(0, 1, 0)), '#ff4060', 6, 2.0);
+            // Particle color tinted by class
+            const burstColor = ({ sword: '#cfd8ff', dagger: '#ff4060', bow: '#9bff9b', scythe: '#ff6060' })[cls];
+            this.game.particles.spawnBurst(player.position.clone().add(new THREE.Vector3(0, 1, 0)), burstColor, 6, 2.0);
         }
 
         if (this.timer <= 0) {

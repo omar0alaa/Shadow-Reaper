@@ -97,16 +97,17 @@ export class LootSystem {
         this.spawn(pos.clone().add(new THREE.Vector3(-1.0, 0,  0.0)), 'shard', 60);
         // weapon drop — fetch from server
         try {
-            const r = await fetch(`/api/procedural/weapon_drop?wave=${wave}&seed=${this.game.runState.seed || 0}`);
+            const cls = this.game.playerClass || (this.game.player && this.game.player.weaponClass) || 'sword';
+            const r = await fetch(`/api/procedural/weapon_drop?wave=${wave}&seed=${this.game.runState.seed || 0}&class=${cls}`);
             const d = await r.json();
             if (d.ok) {
                 this.pendingWeapon = d.weapon_id;
                 this.spawn(pos.clone(), 'weapon', 1, d.weapon_id);
             }
         } catch (e) {
-            // fallback — pick from local data
-            const candidates = ['shadowfang', 'moonveil', 'phantom_bow'];
-            this.pendingWeapon = candidates[Math.floor(Math.random() * candidates.length)];
+            // fallback — uncommon of player's class
+            const cls = this.game.playerClass || 'sword';
+            this.pendingWeapon = `${cls}_uncommon`;
         }
     }
 

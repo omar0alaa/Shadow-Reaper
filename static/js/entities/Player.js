@@ -10,6 +10,16 @@ import { Projectile } from '../combat/Projectile.js';
 
 const TMP_V = new THREE.Vector3();
 
+// Map old type strings → class for any legacy weapon entries that lack `class`.
+function _legacyClass(w) {
+    if (!w) return 'sword';
+    if (w.class) return w.class;
+    if (w.type === 'ranged') return 'bow';
+    if (w.type === 'melee_aoe') return 'scythe';
+    if (w.type === 'dual_fast' || w.type === 'melee_fast') return 'dagger';
+    return 'sword';
+}
+
 export class Player {
     constructor(game) {
         this.game = game;
@@ -39,9 +49,13 @@ export class Player {
             extra_combo_hits: 0, ult_dmg_mult: 0,
         };
 
-        // weapon
-        this.weaponId = 'rusted_dagger';
-        this.weapon = game.weaponData[this.weaponId] || null;
+        // weapon — chosen class drives the starter
+        const startCls = game.playerClass || 'sword';
+        this.weaponClass = startCls;
+        this.weaponId = `${startCls}_common`;
+        this.weapon = game.weaponData[this.weaponId]
+                   || game.weaponData['sword_common']
+                   || null;
 
         // combat
         this.attackTimer = 0;
@@ -154,15 +168,17 @@ export class Player {
             this.weaponMount.add(d1);
             // off-hand mirrored
             this.offhandMount = new THREE.Group();
-            this.offhandMount.position.set(-0.48, 0.95, 0.1); // exactly at hand level
+            this.offhandMount.position.set(-0.48, 0.95, 0.1);
             const d2 = d1.clone();
             this.offhandMount.add(d2);
             this.group.add(this.offhandMount);
-        } else if (w.type === 'melee_heavy') {
-            const blade = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.06, 1.4), mat);
-            blade.position.set(0, 0, 0.7); blade.castShadow = true;
+        } else if (w.type === 'melee_heavy' || w.type === 'melee_balanced') {
+            // sword: blade + crossguard
+            const len = w.type === 'melee_balanced' ? 1.05 : 1.4;
+            const blade = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.06, len), mat);
+            blade.position.set(0, 0, len * 0.5); blade.castShadow = true;
             this.weaponMount.add(blade);
-            const guard = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.16, 0.08), mat);
+            const guard = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.14, 0.08), mat);
             guard.position.set(0, 0, 0);
             this.weaponMount.add(guard);
         } else if (w.type === 'ranged') {
@@ -258,7 +274,10 @@ export class Player {
         this.stamina = state.stats.stamina ?? this.maxStamina;
         this.maxEnergy = state.stats.max_energy || 100;
         this.energy = state.stats.energy ?? 0;
-        this.equipWeapon(state.weapon || 'rusted_dagger');
+        const cls = state.class || this.game.playerClass || 'sword';
+        this.game.playerClass = cls;
+        const weaponId = state.weapon || `${cls}_common`;
+        this.equipWeapon(weaponId);
         // re-apply upgrades
         if (state.upgrades) {
             for (const u of state.upgrades) this.game.upgrades.applyUpgrade(u, /* fromLoad */ true);
@@ -275,11 +294,57 @@ export class Player {
     }
 
     equipWeapon(id) {
+        // Resolve fallback if id missing (e.g. legacy save). Try the player's
+        // class default; if still missing, fall back to the first known weapon.
+        let weapon = this.game.weaponData[id];
+        if (!weapon) {
+            const cls = this.weaponClass || this.game.playerClass || 'sword';
+            id = `${cls}_common`;
+            weapon = this.game.weaponData[id];
+        }
         this.weaponId = id;
-        this.weapon = this.game.weaponData[id];
+        this.weapon = weapon || null;
+        this.weaponClass = weapon ? (weapon.class || _legacyClass(weapon)) : 'sword';
+        if (this.weapon) this.game.playerClass = this.weaponClass;
         this._buildWeaponMesh();
-        const wlabel = document.getElementById('weaponLabel');
-        if (wlabel && this.weapon) wlabel.textContent = this.weapon.name;
+
+        // Update HUD weapon label with rarity-tinted color
+        if (this.game.hud && this.weapon) {
+            const rarityColors = {
+                common: '#cfcfcf', uncommon: '#6dd66d', rare: '#3aa0ff',
+                epic: '#a45cff', legendary: '#ffb635',
+            };
+            const c = rarityColors[this.weapon.rarity] || this.weapon.color || '#fff';
+            this.game.hud.setWeaponLabel(this.weapon.name, c);
+
+            // Skill name labels can vary by class
+            const r = this._rNameForClass(this.weaponClass);
+            const q = this._qNameForClass(this.weaponClass);
+            this.game.hud.setSkillNames({ Q: q, E: 'Smoke Bomb', R: r, F: 'Reaper Time' });
+        }
+    }
+
+    _rNameForClass(cls) {
+        return {
+            sword:  'Whirlwind',
+            dagger: 'Blade Flurry',
+            bow:    'Arrow Storm',
+            scythe: 'Reaping Spin',
+        }[cls] || 'Blade Flurry';
+    }
+    _qNameForClass(cls) {
+        return {
+            sword:  'Shadow Dash',
+            dagger: 'Phantom Step',
+            bow:    'Shadow Roll',
+            scythe: 'Soul Pull',
+        }[cls] || 'Shadow Dash';
+    }
+
+    /** Bump the infinite combo counter and refresh its 1.5s decay timer. */
+    incrementCombo() {
+        this.comboCount = (this.comboCount || 0) + 1;
+        this.comboTimer = 1.5;
     }
 
     isRanged() { return this.weapon && this.weapon.type === 'ranged'; }
@@ -525,17 +590,37 @@ export class Player {
         this._curSwingDuration = dur;
         this.game.audio.bowShot();
         const fwd = new THREE.Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw));
-        // aim slightly upward toward camera target
-        const target = this.lockTarget && this.lockTarget.alive ? this.lockTarget.position.clone() : this.position.clone().add(fwd.clone().multiplyScalar(20));
+        const target = this.lockTarget && this.lockTarget.alive
+            ? this.lockTarget.position.clone()
+            : this.position.clone().add(fwd.clone().multiplyScalar(20));
         const start = this.position.clone().add(fwd.clone().multiplyScalar(0.6)).add(new THREE.Vector3(0, 1.3, 0));
-        const dir = target.clone().sub(start); dir.y = 0; dir.normalize();
+        const baseDir = target.clone().sub(start); baseDir.y = 0; baseDir.normalize();
         const dmg = (charged ? w.damage * 1.8 : w.damage);
-        const proj = new Projectile(this.game, {
-            origin: start, direction: dir, speed: 36, damage: dmg,
-            life: 2.5, color: w.color || '#9bff9b', size: 0.18, fromPlayer: true, kind: 'arrow',
-            pierce: true, ricochet: this.stats.ricochet ? 1 : 0,
-        });
-        this.game.projectiles.push(proj);
+
+        // Multishot: extra arrows fan out at small angles
+        const extraShots = (this.stats.multishot || 0);
+        const totalShots = 1 + extraShots;
+        const fanAngle = 0.10; // radians between shots
+        const ricochet = this.stats.ricochet ? 1 : 0;
+        const autoRic = (w.modifies && w.modifies.auto_ricochet) || 0;
+        const pierce = (w.modifies && w.modifies.pierce) || charged;
+
+        for (let i = 0; i < totalShots; i++) {
+            const offset = (i - (totalShots - 1) / 2) * fanAngle;
+            const c = Math.cos(offset), s = Math.sin(offset);
+            const dir = new THREE.Vector3(
+                baseDir.x * c - baseDir.z * s,
+                0,
+                baseDir.x * s + baseDir.z * c,
+            );
+            const proj = new Projectile(this.game, {
+                origin: start.clone(), direction: dir, speed: 36, damage: dmg,
+                life: 2.5, color: w.color || '#9bff9b', size: 0.18,
+                fromPlayer: true, kind: 'arrow',
+                pierce, ricochet: ricochet + autoRic,
+            });
+            this.game.projectiles.push(proj);
+        }
     }
 
     _scheduleMeleeHit(startT, endT, heavy = false) {

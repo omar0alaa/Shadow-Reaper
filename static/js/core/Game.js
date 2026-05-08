@@ -113,13 +113,14 @@ export class Game {
     }
 
     // ---------- run lifecycle ----------
-    async startNewRun(difficulty = 'normal') {
+    async startNewRun(difficulty = 'normal', playerClass = 'sword') {
         this.state = 'loading';
         document.getElementById('loadingScreen').classList.remove('hidden');
-        const r = await fetch(`/api/run/new?difficulty=${difficulty}`, { method: 'POST' });
+        const r = await fetch(`/api/run/new?difficulty=${difficulty}&class=${playerClass}`, { method: 'POST' });
         const d = await r.json();
         if (!d.ok) throw new Error('run start failed');
         this.difficulty = difficulty;
+        this.playerClass = playerClass;
         await this._enterRun(d.state, d.arena);
     }
 
@@ -131,6 +132,7 @@ export class Game {
         this.state = 'loading';
         document.getElementById('loadingScreen').classList.remove('hidden');
         this.difficulty = d.state.difficulty || 'normal';
+        this.playerClass = d.state.class || 'sword';
         await this._enterRun(d.state, d.arena);
         return true;
     }
@@ -236,13 +238,15 @@ export class Game {
 
         // explode-on-kill upgrade
         if (this.player.stats.explode_kills > 0) {
-            const r = 4.0;
-            const dmg = enemy.maxHealth * this.player.stats.explode_kills;
-            this.particles.spawnBurst(enemy.position, '#ff8c1a', 24, 5);
+            const r = 4.5;
+            const dmg = Math.max(15, enemy.maxHealth * this.player.stats.explode_kills);
+            this.particles.spawnBurst(enemy.position.clone().add(new THREE.Vector3(0, 0.6, 0)), '#ff8c1a', 32, 6);
+            this.audio.heavySwing();
+            this.scene.addShake(0.18, 0.18);
             for (const e of this.enemies) {
                 if (e === enemy || !e.alive) continue;
                 if (e.position.distanceTo(enemy.position) < r) {
-                    this.combat.applyDamage(e, dmg, { source: 'explosion' });
+                    this.combat.applyDamage(e, dmg, { source: 'explosion', fromPlayer: true });
                 }
             }
         }

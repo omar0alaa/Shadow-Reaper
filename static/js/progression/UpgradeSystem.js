@@ -12,8 +12,22 @@ export class UpgradeSystem {
         return this.game.upgradePool || [];
     }
 
+    /** Filter the global pool down to the upgrades this run's class can use. */
+    classScopedPool() {
+        const cls = (this.game.player && this.game.player.weaponClass)
+                  || this.game.playerClass
+                  || 'sword';
+        const out = [];
+        for (const u of this.pool()) {
+            const scope = u.scope;
+            if (!scope || scope === 'any') { out.push(u); continue; }
+            if (Array.isArray(scope) && scope.includes(cls)) out.push(u);
+        }
+        return out;
+    }
+
     pickThree(wave) {
-        const pool = this.pool();
+        const pool = this.classScopedPool();
         if (!pool.length) return [];
         // bias rarities up with wave
         const weights = { ...RARITY_WEIGHTS };
@@ -75,6 +89,7 @@ export class UpgradeSystem {
             case 'execute_thresh':s.execute_thresh = Math.max(s.execute_thresh || 0, v); break;
             case 'extra_combo_hits': s.extra_combo_hits = (s.extra_combo_hits || 0) + v; break;
             case 'ult_dmg_mult':  s.ult_dmg_mult = (s.ult_dmg_mult || 0) + v; break;
+            case 'multishot':     s.multishot = (s.multishot || 0) + v; break;
         }
         if (!fromLoad) {
             this.game.runState.upgrades = this.game.runState.upgrades || [];

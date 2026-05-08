@@ -2,6 +2,7 @@
 // Handles travel, hit detection (against player or enemies), pierce, ricochet.
 
 import * as THREE from 'three';
+import { WeaponTraits } from './Weapon.js';
 
 export class Projectile {
     constructor(game, opts) {
@@ -58,18 +59,26 @@ export class Projectile {
 
         // Hit checks
         if (this.fromPlayer) {
+            const playerWeapon = this.game.player ? this.game.player.weapon : null;
             for (const e of this.game.enemies) {
                 if (!e.alive || this._hits.has(e)) continue;
                 const d = e.position.clone().setY(0).distanceTo(this.position.clone().setY(0));
                 if (d < (e.contactRadius + this.size + 0.4)) {
                     this._hits.add(e);
-                    this.game.combat.applyDamage(e, this.damage, { source: 'projectile', fromPlayer: true });
+                    this.game.combat.applyDamage(e, this.damage, {
+                        source: this.kind === 'wave' ? 'wave' : 'projectile',
+                        fromPlayer: true,
+                        weapon: playerWeapon,
+                    });
+                    // Bow / wave-specific on-hit upgrades
+                    if (this.game.combat.onProjectileHit) {
+                        this.game.combat.onProjectileHit(e, this.damage);
+                    }
                     if (this.kind === 'wave') {
                         // wave keeps going (pierce)
                     } else if (this.pierce) {
                         // continues
                     } else if (this.ricochet > 0) {
-                        // pick a new target
                         const others = this.game.enemies.filter(en => en.alive && !this._hits.has(en));
                         if (others.length === 0) return this.dispose();
                         others.sort((a, b) => a.position.distanceTo(this.position) - b.position.distanceTo(this.position));

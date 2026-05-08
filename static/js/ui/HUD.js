@@ -14,15 +14,34 @@ export class HUD {
         this.bossName = document.getElementById('bossName');
         this.comboEl = document.getElementById('comboDisplay');
         this.countdownEl = document.getElementById('waveCountdown');
+        this.weaponLabel = document.getElementById('weaponLabel');
         this.cd = {
             Q: document.getElementById('cdQ'),
             E: document.getElementById('cdE'),
             R: document.getElementById('cdR'),
             F: document.getElementById('cdF'),
         };
+        this.skillNameEls = {};
+        document.querySelectorAll('.skill').forEach(el => {
+            const k = el.getAttribute('data-key');
+            const nameEl = el.querySelector('.skillName');
+            if (k && nameEl) this.skillNameEls[k] = nameEl;
+        });
         this._curBoss = null;
         this._lerp = { hp: 1, st: 1, en: 0 };
         this._lastCombo = 0;
+    }
+
+    setSkillNames(names) {
+        for (const k of ['Q', 'E', 'R', 'F']) {
+            if (this.skillNameEls[k] && names[k]) this.skillNameEls[k].textContent = names[k];
+        }
+    }
+
+    setWeaponLabel(text, color) {
+        if (!this.weaponLabel) return;
+        this.weaponLabel.textContent = text;
+        if (color) this.weaponLabel.style.color = color;
     }
 
     toast(text) {

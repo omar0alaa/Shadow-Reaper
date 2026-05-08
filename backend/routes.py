@@ -4,7 +4,13 @@ from __future__ import annotations
 from flask import Blueprint, current_app, jsonify, request
 
 from . import procedural, save_manager
-from .game_data import UPGRADES, WEAPONS
+from .game_data import (
+    CLASS_DISPLAY,
+    UPGRADES,
+    WEAPON_CLASSES,
+    WEAPONS,
+    starting_weapon_for,
+)
 
 api_bp = Blueprint("api", __name__)
 
@@ -17,9 +23,14 @@ def _saves_dir() -> str:
 def run_new():
     seed = procedural.make_seed()
     difficulty = request.args.get("difficulty", default="normal", type=str)
+    player_class = request.args.get("class", default="sword", type=str)
+    if player_class not in WEAPON_CLASSES:
+        player_class = "sword"
+    weapon_id = starting_weapon_for(player_class)
     state = {
         "seed": seed,
         "difficulty": difficulty,
+        "class": player_class,
         "wave": 1,
         "alive": True,
         "stats": {
@@ -41,10 +52,10 @@ def run_new():
             "energy_gain": 1.0,
         },
         "upgrades": [],
-        "weapon": "rusted_dagger",
+        "weapon": weapon_id,
         "kills": 0,
         "damage_dealt": 0,
-        "weapons_found": ["rusted_dagger"],
+        "weapons_found": [weapon_id],
     }
     save_manager.save_run(_saves_dir(), state)
     return jsonify({"ok": True, "state": state, "arena": procedural.generate_arena(seed)})
@@ -116,5 +127,11 @@ def data_weapons():
 def procedural_weapon_drop():
     wave = request.args.get("wave", default=10, type=int)
     seed = request.args.get("seed", default=0, type=int)
-    wid = procedural.pick_weapon_drop(wave, seed)
+    player_class = request.args.get("class", default="sword", type=str)
+    wid = procedural.pick_weapon_drop(wave, player_class, seed)
     return jsonify({"ok": True, "weapon_id": wid, "weapon": WEAPONS.get(wid)})
+
+
+@api_bp.route("/data/classes", methods=["GET"])
+def data_classes():
+    return jsonify({"ok": True, "classes": CLASS_DISPLAY})

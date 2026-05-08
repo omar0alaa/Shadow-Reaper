@@ -350,3 +350,88 @@ html, body {
 
 /* lock cursor cleanup when canvas captures pointer */
 body.locked { cursor: none; }
+
+/* ---------- Combo display ---------- */
+#comboDisplay {
+    position: absolute;
+    top: 220px; right: 24px;
+    text-align: right;
+    font-family: 'Cinzel', serif;
+    pointer-events: none;
+    user-select: none;
+    transition: opacity .15s ease;
+}
+#comboCount {
+    font-size: 44px;
+    font-weight: 900;
+    color: var(--gold);
+    text-shadow: 0 0 14px rgba(217,178,90,.7), 0 2px 0 #000;
+    letter-spacing: .04em;
+    line-height: 1;
+}
+#comboCount.hot   { color: #ff8c1a; text-shadow: 0 0 16px rgba(255,140,26,.85), 0 2px 0 #000; }
+#comboCount.blaze { color: #ff3a3a; text-shadow: 0 0 22px rgba(255,58,58,1), 0 2px 0 #000; animation: comboPulse .3s ease-out; }
+#comboBonus {
+    font-size: 12px;
+    letter-spacing: .15em;
+    color: var(--text-dim);
+    margin-top: 2px;
+}
+@keyframes comboPulse {
+    0%   { transform: scale(1.4); }
+    100% { transform: scale(1); }
+}
+
+/* ---------- Wave clear countdown ---------- */
+#waveCountdown {
+    position: absolute;
+    top: 50%; left: 50%; transform: translate(-50%, -50%);
+    font-family: 'Cinzel', serif;
+    font-size: 72px;
+    font-weight: 900;
+    color: var(--gold);
+    text-shadow: 0 0 20px rgba(217,178,90,.5), 0 0 40px rgba(217,178,90,.25);
+    letter-spacing: .15em;
+    pointer-events: none;
+    user-select: none;
+}
+
+/* ---------- Class selection ---------- */
+#classSelectScreen { z-index: 12; gap: 0; }
+#classCards { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; max-width: 1100px; }
+.classCard {
+    width: 220px; min-height: 280px;
+    background: linear-gradient(180deg, #14101e, #06040a);
+    border: 2px solid rgba(255,255,255,.18);
+    padding: 22px 18px;
+    cursor: pointer;
+    transition: transform .15s ease, box-shadow .2s ease, border-color .2s;
+    display: flex; flex-direction: column; align-items: center; text-align: center; gap: 12px;
+    pointer-events: auto;
+    position: relative;
+}
+.classCard:hover { transform: translateY(-6px) scale(1.02); }
+.classCard .classGlyph {
+    font-family: 'Cinzel', serif; font-weight: 900; font-size: 48px;
+    line-height: 1;
+}
+.classCard .classTitle { font-family: 'Cinzel', serif; letter-spacing: .15em; font-size: 20px; }
+.classCard .classTagline { color: var(--text-dim); font-size: 12px; line-height: 1.5; }
+.classCard .classStats { font-size: 11px; letter-spacing: .1em; color: var(--text-dim); }
+.classCard .classStats b { color: var(--text); }
+
+.classCard.sword  { border-color: #6a85b8; box-shadow: 0 0 20px rgba(106,133,184,.25); }
+.classCard.dagger { border-color: #9a72d8; box-shadow: 0 0 20px rgba(154,114,216,.25); }
+.classCard.bow    { border-color: #6dd66d; box-shadow: 0 0 20px rgba(109,214,109,.25); }
+.classCard.scythe { border-color: #d04848; box-shadow: 0 0 20px rgba(208,72,72,.25); }
+.classCard.sword:hover  { box-shadow: 0 0 30px rgba(106,133,184,.55); }
+.classCard.dagger:hover { box-shadow: 0 0 30px rgba(154,114,216,.55); }
+.classCard.bow:hover    { box-shadow: 0 0 30px rgba(109,214,109,.55); }
+.classCard.scythe:hover { box-shadow: 0 0 30px rgba(208,72,72,.55); }
+
+/* Rarity glow on inventory weapon swatch + cards */
+.rarity-common    { color: #cfcfcf !important; }
+.rarity-uncommon  { color: #6dd66d !important; }
+.rarity-rare      { color: #3aa0ff !important; }
+.rarity-epic      { color: #a45cff !important; }
+.rarity-legendary { color: #ffb635 !important; }
