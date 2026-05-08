@@ -206,6 +206,40 @@ html, body {
     100% { opacity: 0; transform: translate(-50%, -200%) scale(.9); }
 }
 
+/* ---------- Combo & Countdown ---------- */
+#comboDisplay {
+    position: absolute; right: 24px; top: 40%;
+    text-align: right; pointer-events: none;
+    transform-origin: right center;
+}
+#comboCount {
+    font-family: 'Cinzel', serif; font-weight: 900;
+    font-size: 56px; color: var(--gold);
+    text-shadow: 0 0 20px rgba(217,178,90,.6), 0 3px 0 #000;
+    letter-spacing: .05em;
+}
+#comboBonus {
+    font-size: 16px; color: #fff; letter-spacing: .15em;
+    text-shadow: 0 0 10px #000; margin-top: -6px;
+}
+.combo-pulse { animation: comboPulse 0.3s ease-out; }
+@keyframes comboPulse {
+    0% { transform: scale(1.4); }
+    100% { transform: scale(1); }
+}
+
+#waveCountdown {
+    position: absolute; top: 30%; left: 50%; transform: translateX(-50%);
+    font-family: 'Cinzel', serif; font-weight: 700; font-size: 32px;
+    color: var(--accent); letter-spacing: .2em;
+    text-shadow: 0 0 24px rgba(197,37,47,.8), 0 2px 0 #000;
+    animation: countdownFade 1s infinite alternate;
+}
+@keyframes countdownFade {
+    0% { opacity: 0.7; }
+    100% { opacity: 1; }
+}
+
 /* ---------- Upgrade selection ---------- */
 #upgradeScreen { z-index: 12; }
 .upTitle {

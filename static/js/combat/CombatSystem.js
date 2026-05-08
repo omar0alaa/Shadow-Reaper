@@ -140,6 +140,7 @@ export class CombatSystem {
         enemy.takeDamage(amount, info);
         const player = this.game.player;
         if (info.fromPlayer && player) {
+            player.incrementCombo();
             this.game.runStats.damage += amount;
             const lifesteal = (player.stats.lifesteal || 0) + WeaponTraits.weaponLifesteal(player.weapon);
             if (lifesteal > 0) player.heal(amount * lifesteal);

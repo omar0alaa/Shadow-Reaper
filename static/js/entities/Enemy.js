@@ -136,6 +136,14 @@ export class Enemy {
         c.fillRect(1, 1, (w - 2) * pct, h - 2);
         c.strokeStyle = 'rgba(255,255,255,0.25)';
         c.strokeRect(0.5, 0.5, w - 1, h - 1);
+
+        // draw stun icon if stunned
+        if (this.staggerTime > 0 || this.stunned > 0) {
+            c.fillStyle = '#ffe600';
+            c.font = '7px sans-serif';
+            c.fillText('💫', w / 2 - 4, h - 1);
+        }
+
         this.hbTex.needsUpdate = true;
     }
 
@@ -231,6 +239,10 @@ export class Enemy {
         if (this.staggerTime > 0) {
             this.staggerTime -= dt;
             this.group.rotation.z = Math.sin(performance.now() / 30) * 0.06;
+            if (this.staggerTime <= 0) {
+                this.group.rotation.z = 0;
+                this._renderHealthBar(); // Clear stun icon
+            }
             return;
         } else this.group.rotation.z = 0;
 

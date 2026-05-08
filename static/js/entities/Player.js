@@ -46,7 +46,9 @@ export class Player {
         // combat
         this.attackTimer = 0;
         this.comboIndex = 0;
-        this.comboWindow = 0;     // seconds remaining in combo window
+        this.comboWindow = 0;     // swing window (for animation)
+        this.comboCount = 0;      // total hits (infinite)
+        this.comboTimer = 0;      // 1.5s timeout
         this.attackHitFrame = false;
         this.heavyWindup = 0;
         this.heavyActive = false;
@@ -116,7 +118,7 @@ export class Player {
 
         // weapon mount
         this.weaponMount = new THREE.Group();
-        this.weaponMount.position.set(0.6, 1.32, 0.1);
+        this.weaponMount.position.set(0.48, 0.95, 0.1); // exactly at hand level
         this.group.add(this.weaponMount);
         this._buildWeaponMesh();
 
@@ -147,42 +149,43 @@ export class Player {
         });
         if (w.type === 'dual_fast') {
             // two daggers
-            const d1 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.7, 0.1), mat);
-            d1.position.set(0, -0.1, 0); d1.castShadow = true;
+            const d1 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.7), mat);
+            d1.position.set(0, 0, 0.35); d1.castShadow = true;
             this.weaponMount.add(d1);
             // off-hand mirrored
             this.offhandMount = new THREE.Group();
-            this.offhandMount.position.set(-0.6, 1.32, 0.1);
+            this.offhandMount.position.set(-0.48, 0.95, 0.1); // exactly at hand level
             const d2 = d1.clone();
             this.offhandMount.add(d2);
             this.group.add(this.offhandMount);
         } else if (w.type === 'melee_heavy') {
-            const blade = new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.4, 0.06), mat);
-            blade.position.set(0, -0.5, 0); blade.castShadow = true;
+            const blade = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.06, 1.4), mat);
+            blade.position.set(0, 0, 0.7); blade.castShadow = true;
             this.weaponMount.add(blade);
-            const guard = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.08, 0.16), mat);
-            guard.position.set(0, 0.05, 0);
+            const guard = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.16, 0.08), mat);
+            guard.position.set(0, 0, 0);
             this.weaponMount.add(guard);
         } else if (w.type === 'ranged') {
             const bow = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.04, 8, 24, Math.PI * 1.4), mat);
-            bow.rotation.set(Math.PI / 2, 0, Math.PI / 2);
-            bow.position.set(0, -0.1, 0);
+            bow.rotation.set(0, Math.PI / 2, 0);
+            bow.position.set(0, 0, 0.2);
             this.weaponMount.add(bow);
         } else if (w.type === 'melee_aoe') {
             const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.6, 6), new THREE.MeshStandardMaterial({ color: 0x2a1010 }));
-            shaft.position.set(0, -0.4, 0);
+            shaft.rotation.x = Math.PI / 2;
+            shaft.position.set(0, 0, 0.8);
             this.weaponMount.add(shaft);
-            const blade = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.18, 0.05), mat);
-            blade.position.set(0.4, 0.4, 0);
-            blade.rotation.z = -0.5;
+            const blade = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.05, 0.18), mat);
+            blade.position.set(0.4, 0, 1.4);
+            blade.rotation.y = -0.5;
             this.weaponMount.add(blade);
         } else {
             // basic dagger
-            const blade = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.55, 0.06), mat);
-            blade.position.set(0, -0.1, 0); blade.castShadow = true;
+            const blade = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.06, 0.55), mat);
+            blade.position.set(0, 0, 0.25); blade.castShadow = true;
             this.weaponMount.add(blade);
-            const guard = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.06, 0.1), mat);
-            guard.position.set(0, 0.18, 0);
+            const guard = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.1, 0.06), mat);
+            guard.position.set(0, 0, 0);
             this.weaponMount.add(guard);
         }
 
@@ -285,7 +288,7 @@ export class Player {
     takeDamage(amount, source) {
         if (this.invuln > 0) return false;
         this.health -= amount;
-        this.invuln = 0.45;
+        this.invuln = 0.8; // increased i-frames
         this.game.audio.hurt();
         this.game.scene.addShake(0.2 + Math.min(0.4, amount / 60), 0.25);
         this.game.dmgNumbers.spawn(this.position.clone().add(new THREE.Vector3(0, 1.6, 0)), Math.floor(amount), { kind: 'player' });
@@ -391,6 +394,13 @@ export class Player {
         if (this.comboWindow > 0) this.comboWindow -= dt;
         else if (this.comboWindow <= 0 && this.comboIndex !== 0) this.comboIndex = 0;
 
+        if (this.comboTimer > 0) {
+            this.comboTimer -= rawDt;
+            if (this.comboTimer <= 0) {
+                this.comboCount = 0; // reset combo multiplier
+            }
+        }
+
         if (input.mouse.lmbJust && this.attackTimer <= 0) this._lightAttack();
         if (input.mouse.rmbJust && this.attackTimer <= 0) this._heavyAttack();
 
@@ -410,7 +420,14 @@ export class Player {
         }
 
         // i-frames countdown
-        if (this.invuln > 0) this.invuln -= rawDt;
+        if (this.invuln > 0) {
+            this.invuln -= rawDt;
+            // Visual blink effect for i-frames
+            const blink = Math.floor(this.invuln * 15) % 2 === 0;
+            this.lLeg.visible = this.rLeg.visible = this.torso.visible = this.head.visible = this.lArm.visible = this.rArm.visible = blink;
+        } else {
+            this.lLeg.visible = this.rLeg.visible = this.torso.visible = this.head.visible = this.lArm.visible = this.rArm.visible = true;
+        }
 
         // Camera follow
         this._updateCamera(rawDt);
@@ -530,6 +547,11 @@ export class Player {
             comboIndex: this.comboIndex,
             applied: new Set(),
         });
+    }
+
+    incrementCombo() {
+        this.comboCount = (this.comboCount || 0) + 1;
+        this.comboTimer = 1.5; // 1.5s before combo resets
     }
 
     _weaponTrailColor() {

@@ -95,8 +95,21 @@ export class Projectile {
             }
         }
 
-        // Out of arena bounds
+        // Hit arena walls / props
+        let hitWall = false;
         if (Math.hypot(this.position.x, this.position.z) > this.game.arena.radius - 0.4) {
+            hitWall = true;
+        } else {
+            for (const c of this.game.arena.colliders) {
+                if (Math.hypot(this.position.x - c.x, this.position.z - c.z) < c.r + this.size) {
+                    hitWall = true;
+                    break;
+                }
+            }
+        }
+        
+        if (hitWall) {
+            this.game.particles.spawnSmall(this.position, this.color, 0.8);
             return this.dispose();
         }
 

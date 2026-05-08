@@ -1,4 +1,4 @@
-// HUD — bars, skill cooldowns, wave counter, boss bar, toasts.
+// HUD — bars, skill cooldowns, wave counter, boss bar, toasts, combo, countdown.
 
 export class HUD {
     constructor(game) {
@@ -12,6 +12,8 @@ export class HUD {
         this.bossWrap = document.getElementById('bossBarWrap');
         this.bossBar = document.getElementById('bossBar');
         this.bossName = document.getElementById('bossName');
+        this.comboEl = document.getElementById('comboDisplay');
+        this.countdownEl = document.getElementById('waveCountdown');
         this.cd = {
             Q: document.getElementById('cdQ'),
             E: document.getElementById('cdE'),
@@ -20,6 +22,7 @@ export class HUD {
         };
         this._curBoss = null;
         this._lerp = { hp: 1, st: 1, en: 0 };
+        this._lastCombo = 0;
     }
 
     toast(text) {
@@ -77,6 +80,28 @@ export class HUD {
             else this.bossBar.style.width = ((this._curBoss.health / this._curBoss.maxHealth) * 100).toFixed(1) + '%';
         }
 
+        // Combo multiplier display
+        const combo = p.comboCount || 0;
+        if (this.comboEl) {
+            if (combo >= 2) {
+                const comboDmgBonus = p.stats.combo_damage || 0;
+                const bonusPct = Math.round(combo * comboDmgBonus * 100);
+                this.comboEl.classList.remove('hidden');
+                this.comboEl.querySelector('#comboCount').textContent = `×${combo}`;
+                this.comboEl.querySelector('#comboBonus').textContent =
+                    comboDmgBonus > 0 ? `+${bonusPct}% DMG` : 'COMBO';
+                // Pulse animation when combo increments
+                if (combo !== this._lastCombo) {
+                    this.comboEl.classList.remove('combo-pulse');
+                    void this.comboEl.offsetWidth; // reflow to restart animation
+                    this.comboEl.classList.add('combo-pulse');
+                }
+            } else {
+                this.comboEl.classList.add('hidden');
+            }
+        }
+        this._lastCombo = combo;
+
         // skill cooldowns
         for (const k of ['Q', 'E', 'R', 'F']) {
             const sk = p.skills[k];
@@ -86,6 +111,18 @@ export class HUD {
             parent.style.opacity = sk.ready ? 1 : 0.85;
             parent.style.filter = sk.ready ? 'none' : 'grayscale(.4)';
         }
+    }
+
+    showCountdown(remaining) {
+        if (!this.countdownEl) return;
+        this.countdownEl.classList.remove('hidden');
+        const secs = Math.ceil(remaining);
+        this.countdownEl.textContent = `Upgrade in ${secs}…`;
+    }
+
+    hideCountdown() {
+        if (!this.countdownEl) return;
+        this.countdownEl.classList.add('hidden');
     }
 
     _setCooldownSweep(el, pct) {

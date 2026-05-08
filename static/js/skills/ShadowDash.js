@@ -27,7 +27,7 @@ export class ShadowDash {
         const dur = 0.22;
         this.player._dashVel = new THREE.Vector3(fwd.x * (dist / dur), 0, fwd.z * (dist / dur));
         this.player._dashTime = dur;
-        this.player.invuln = Math.max(this.player.invuln, 0.32 + (this.player.stats.iframe_bonus || 0));
+        this.player.invuln = Math.max(this.player.invuln, 0.6 + (this.player.stats.iframe_bonus || 0));
         this.cd = this.maxCd / Math.max(1, charges);
         this.game.audio.dash();
         this.game.scene.addShake(0.15, 0.2);

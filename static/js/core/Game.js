@@ -269,13 +269,18 @@ export class Game {
         this.runState.wave = this.wave + 1;
         this.persistRun();
 
-        // Open weapon drop screen if a weapon dropped (boss wave) - LootSystem flags this.
-        if (this.loot.pendingWeapon) {
-            this._openWeaponDrop(this.loot.pendingWeapon);
-            this.loot.pendingWeapon = null;
-        } else {
-            this._openUpgrade();
-        }
+        // Show a 2-second countdown before showing the upgrade/weapon-drop screen
+        // so the player cannot accidentally click an upgrade immediately after killing the last mob.
+        this.hud.toast('WAVE CLEARED!');
+        this._waveCountdown = 2.0;
+        this._waveCountdownPending = () => {
+            if (this.loot.pendingWeapon) {
+                this._openWeaponDrop(this.loot.pendingWeapon);
+                this.loot.pendingWeapon = null;
+            } else {
+                this._openUpgrade();
+            }
+        };
     }
 
     _openUpgrade() {
@@ -405,6 +410,21 @@ export class Game {
         const playing = (this.state === 'playing');
         const dt = playing && this.hitstopTimer <= 0 ? rawDt * this.timeScale : 0;
         const enemyDt = playing && this.hitstopTimer <= 0 ? rawDt * this.enemyTimeScale : 0;
+
+        // Wave-cleared countdown: tick down and fire callback when ready
+        if (this._waveCountdown > 0 && this.state === 'playing') {
+            this._waveCountdown -= rawDt;
+            this.hud.showCountdown(this._waveCountdown);
+            if (this._waveCountdown <= 0) {
+                this.hud.hideCountdown();
+                this._waveCountdown = 0;
+                if (this._waveCountdownPending) {
+                    const cb = this._waveCountdownPending;
+                    this._waveCountdownPending = null;
+                    cb();
+                }
+            }
+        }
 
         if (playing) {
             this.player.update(dt, rawDt, this.input);
