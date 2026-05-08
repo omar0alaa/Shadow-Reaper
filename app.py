@@ -36,5 +36,9 @@ def create_app() -> Flask:
 
 if __name__ == "__main__":
     app = create_app()
-    print("\n  Shadow Reaper — open http://localhost:80 to play\n")
-    app.run(host="0.0.0.0", port=80, debug=False, use_reloader=False)
+    print("\n  Shadow Reaper — open https://localhost:443 to play\n")
+    cert_path = '/etc/letsencrypt/live/shadow.omarkhater.com/fullchain.pem'
+    key_path = '/etc/letsencrypt/live/shadow.omarkhater.com/privkey.pem'
+    
+    # Launch on public HTTPS port 443
+    app.run(host='0.0.0.0', port=443, ssl_context=(cert_path, key_path))
