@@ -41,6 +41,7 @@ export class Game {
         // game state
         this.state = 'menu'; // menu | playing | paused | upgrade | inventory | weapondrop | dead | loading
         this.runState = null;
+        this.difficulty = 'normal';
         this.arenaData = null;
         this.arena = null;
         this.player = null;
@@ -112,12 +113,13 @@ export class Game {
     }
 
     // ---------- run lifecycle ----------
-    async startNewRun() {
+    async startNewRun(difficulty = 'normal') {
         this.state = 'loading';
         document.getElementById('loadingScreen').classList.remove('hidden');
-        const r = await fetch('/api/run/new', { method: 'POST' });
+        const r = await fetch(`/api/run/new?difficulty=${difficulty}`, { method: 'POST' });
         const d = await r.json();
         if (!d.ok) throw new Error('run start failed');
+        this.difficulty = difficulty;
         await this._enterRun(d.state, d.arena);
     }
 
@@ -128,6 +130,7 @@ export class Game {
         if (!d.ok) return false;
         this.state = 'loading';
         document.getElementById('loadingScreen').classList.remove('hidden');
+        this.difficulty = d.state.difficulty || 'normal';
         await this._enterRun(d.state, d.arena);
         return true;
     }

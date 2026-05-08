@@ -11,9 +11,14 @@ export class Enemy {
         this.spec = spec;
         this.name = spec.name || 'Enemy';
         this.color = spec.color || '#aa4444';
-        this.maxHealth = spec.hp;
-        this.health = spec.hp;
-        this.damage = spec.damage;
+        let hpMult = 1.0;
+        let dmgMult = 1.0;
+        if (game.difficulty === 'easy') { hpMult = 0.7; dmgMult = 0.7; }
+        if (game.difficulty === 'hard') { hpMult = 1.5; dmgMult = 1.4; }
+
+        this.maxHealth = spec.hp * hpMult;
+        this.health = this.maxHealth;
+        this.damage = spec.damage * dmgMult;
         this.speed = spec.speed;
         this.behavior = spec.behavior;
         this.scale = spec.scale || 1.0;

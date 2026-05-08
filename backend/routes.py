@@ -16,8 +16,10 @@ def _saves_dir() -> str:
 @api_bp.route("/run/new", methods=["POST"])
 def run_new():
     seed = procedural.make_seed()
+    difficulty = request.args.get("difficulty", default="normal", type=str)
     state = {
         "seed": seed,
+        "difficulty": difficulty,
         "wave": 1,
         "alive": True,
         "stats": {

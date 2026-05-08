@@ -14,7 +14,7 @@ export class MainMenu {
             this.game.audio.uiClick(); fn();
         });
 
-        btn('btnNewRun',   () => this._newRun());
+        btn('btnNewRun',   () => this._promptDifficulty());
         btn('btnContinue', () => this._continue());
         btn('btnSettings', () => this._openSettings());
         btn('btnQuit',     () => this._quit());
@@ -41,6 +41,17 @@ export class MainMenu {
 
         // Inventory close button
         document.getElementById('invClose').addEventListener('click', () => { this.game.audio.uiClick(); this.game.toggleInventory(); });
+
+        // Difficulty modal
+        const diffModal = document.getElementById('difficultyModal');
+        btn('btnDiffEasy', () => this._newRun('easy'));
+        btn('btnDiffNormal', () => this._newRun('normal'));
+        btn('btnDiffHard', () => this._newRun('hard'));
+        btn('btnDiffCancel', () => diffModal.classList.add('hidden'));
+    }
+
+    _promptDifficulty() {
+        document.getElementById('difficultyModal').classList.remove('hidden');
     }
 
     show() {
@@ -52,10 +63,11 @@ export class MainMenu {
         }).catch(() => { cont.disabled = true; });
     }
 
-    async _newRun() {
+    async _newRun(difficulty) {
+        document.getElementById('difficultyModal').classList.add('hidden');
         this.menu.classList.add('hidden');
         try {
-            await this.game.startNewRun();
+            await this.game.startNewRun(difficulty);
         } catch (e) {
             console.error(e);
             this.show();

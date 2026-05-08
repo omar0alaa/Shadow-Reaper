@@ -44,7 +44,7 @@ if __name__ == "__main__":
     app.run(host='0.0.0.0', port=443, ssl_context=(cert_path, key_path))
 
 
-#For Localhost
+# For Localhost
 # if __name__ == "__main__":
 #     app = create_app()
 #     print("\n  Shadow Reaper — open http://localhost:80 to play\n")
