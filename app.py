@@ -36,5 +36,5 @@ def create_app() -> Flask:
 
 if __name__ == "__main__":
     app = create_app()
-    print("\n  Shadow Reaper — open http://localhost:6666 to play\n")
-    app.run(host="127.0.0.1", port=6666, debug=False, use_reloader=False)
+    print("\n  Shadow Reaper — open http://localhost:5865 to play\n")
+    app.run(host="127.0.0.1", port=5865, debug=False, use_reloader=False)
