@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Shadow Reaper</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Inter:wght@400;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+</head>
+<body>
+    <!-- Three.js renderer mounts here -->
+    <div id="gameRoot">
+        <canvas id="gameCanvas"></canvas>
+
+        <!-- HUD overlay -->
+        <div id="hud" class="hidden">
+            <div id="topLeft">
+                <div class="bar-row"><span class="bar-label">HP</span><div class="bar"><div id="healthBar" class="bar-fill health"></div><span id="healthText" class="bar-text">120 / 120</span></div></div>
+                <div class="bar-row"><span class="bar-label">ST</span><div class="bar"><div id="staminaBar" class="bar-fill stamina"></div></div></div>
+                <div class="bar-row"><span class="bar-label">EN</span><div class="bar"><div id="energyBar" class="bar-fill energy"></div></div></div>
+            </div>
+
+            <div id="topCenter">
+                <div id="waveBanner">WAVE 1</div>
+                <div id="waveSub">Enemies: 0</div>
+                <div id="bossBarWrap" class="hidden">
+                    <div id="bossName">BOSS</div>
+                    <div class="bossBar"><div id="bossBar"></div></div>
+                </div>
+            </div>
+
+            <div id="topRight">
+                <canvas id="minimap" width="180" height="180"></canvas>
+                <div id="weaponLabel">Rusted Dagger</div>
+            </div>
+
+            <div id="bottomCenter">
+                <div class="skill" data-key="Q"><div class="skillIcon" id="skillQ"><span class="skillLetter">Q</span><div class="cooldown" id="cdQ"></div></div><div class="skillName">Shadow Dash</div></div>
+                <div class="skill" data-key="E"><div class="skillIcon" id="skillE"><span class="skillLetter">E</span><div class="cooldown" id="cdE"></div></div><div class="skillName">Smoke Bomb</div></div>
+                <div class="skill" data-key="R"><div class="skillIcon" id="skillR"><span class="skillLetter">R</span><div class="cooldown" id="cdR"></div></div><div class="skillName">Blade Flurry</div></div>
+                <div class="skill ult" data-key="F"><div class="skillIcon" id="skillF"><span class="skillLetter">F</span><div class="cooldown" id="cdF"></div></div><div class="skillName">Reaper Time</div></div>
+            </div>
+
+            <div id="damageNumbers"></div>
+        </div>
+
+        <!-- Main menu -->
+        <div id="mainMenu" class="screen">
+            <div class="menuVignette"></div>
+            <h1 class="title">SHADOW <span class="reaper">REAPER</span></h1>
+            <p class="subtitle">A dark fantasy roguelike</p>
+            <div class="menuButtons">
+                <button class="menuBtn" id="btnNewRun">New Run</button>
+                <button class="menuBtn" id="btnContinue">Continue</button>
+                <button class="menuBtn" id="btnSettings">Settings</button>
+                <button class="menuBtn" id="btnQuit">Quit</button>
+            </div>
+            <div class="menuFooter">WASD move · Mouse look · LMB attack · Q/E/R/F skills · Tab inventory · Esc pause</div>
+        </div>
+
+        <!-- Settings modal -->
+        <div id="settingsModal" class="screen hidden">
+            <div class="modal">
+                <h2>Settings</h2>
+                <label>Master Volume <input type="range" id="setMaster" min="0" max="1" step="0.01" /></label>
+                <label>SFX Volume <input type="range" id="setSfx" min="0" max="1" step="0.01" /></label>
+                <label>Music Volume <input type="range" id="setMusic" min="0" max="1" step="0.01" /></label>
+                <label>Mouse Sensitivity <input type="range" id="setSens" min="0.0005" max="0.01" step="0.0001" /></label>
+                <label class="checkRow">Invert Y <input type="checkbox" id="setInvert" /></label>
+                <div class="modalBtns">
+                    <button class="menuBtn" id="settingsClose">Close</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Upgrade selection -->
+        <div id="upgradeScreen" class="screen hidden">
+            <h2 class="upTitle">CHOOSE A POWER</h2>
+            <div id="upgradeCards"></div>
+        </div>
+
+        <!-- Inventory -->
+        <div id="inventoryScreen" class="screen hidden">
+            <div class="invPanel">
+                <h2>Inventory</h2>
+                <div id="invWeapon" class="invSection"></div>
+                <h3>Stats</h3>
+                <div id="invStats" class="invSection"></div>
+                <h3>Upgrades Acquired</h3>
+                <div id="invUpgrades" class="invSection"></div>
+                <button class="menuBtn" id="invClose">Close (Tab)</button>
+            </div>
+        </div>
+
+        <!-- Pause -->
+        <div id="pauseScreen" class="screen hidden">
+            <h2 class="pauseTitle">PAUSED</h2>
+            <button class="menuBtn" id="pauseResume">Resume</button>
+            <button class="menuBtn" id="pauseQuit">Abandon Run</button>
+        </div>
+
+        <!-- Death -->
+        <div id="deathScreen" class="screen hidden">
+            <h1 class="deathTitle">YOU DIED</h1>
+            <div id="deathSummary"></div>
+            <button class="menuBtn" id="deathReturn">Return to Menu</button>
+        </div>
+
+        <!-- Boss kill / weapon drop overlay -->
+        <div id="weaponDropScreen" class="screen hidden">
+            <h2>WEAPON ACQUIRED</h2>
+            <div id="weaponDropCard"></div>
+            <button class="menuBtn" id="weaponDropEquip">Equip</button>
+            <button class="menuBtn" id="weaponDropKeep">Keep Current</button>
+        </div>
+
+        <!-- Notice toast -->
+        <div id="toast" class="hidden"></div>
+
+        <!-- Loading -->
+        <div id="loadingScreen" class="screen">
+            <div class="spinner"></div>
+            <div>Forging the abyss…</div>
+        </div>
+    </div>
+
+    <script type="module" src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
