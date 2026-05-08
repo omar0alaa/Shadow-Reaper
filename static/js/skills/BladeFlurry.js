@@ -67,13 +67,34 @@ export class BladeFlurry {
         const cls = player.weaponClass || 'sword';
         const w = player.weapon;
 
-        // Visual spin — varies by class
+        // Visual spin — varies by class. Rotate via player.facing so the
+        // change actually sticks (Player.update otherwise overwrites
+        // group.rotation.y from facing every frame).
         const t = performance.now() / 70;
-        player.weaponMount.rotation.x = Math.sin(t) * 0.8;
-        player.rArm.rotation.x = -1.0 - Math.sin(t * 1.5) * 0.3;
-        player.lArm.rotation.x = -0.5 + Math.cos(t * 1.5) * 0.3;
+        const cls2 = cls;
+        if (cls2 === 'scythe') {
+            // Scythe held out wide — rotate weapon horizontally with the spin.
+            player.weaponMount.rotation.y = Math.sin(t * 0.6);
+            player.weaponMount.rotation.x = -0.2;
+            player.rArm.rotation.x = -1.1;
+            player.rArm.rotation.z = 0.6;
+            player.lArm.rotation.x = -0.4;
+        } else if (cls2 === 'dagger') {
+            // Twin-dagger flurry — both arms outstretched and chopping.
+            player.weaponMount.rotation.x = Math.sin(t * 1.4) * 0.9;
+            player.rArm.rotation.x = -1.2 - Math.sin(t * 1.5) * 0.4;
+            player.lArm.rotation.x = -1.2 + Math.cos(t * 1.5) * 0.4;
+        } else {
+            // Sword Whirlwind — single blade spin out wide.
+            player.weaponMount.rotation.z = 0.6;
+            player.weaponMount.rotation.x = Math.sin(t) * 0.8;
+            player.rArm.rotation.x = -1.0 - Math.sin(t * 1.5) * 0.3;
+            player.rArm.rotation.z = -0.4;
+            player.lArm.rotation.x = -0.5 + Math.cos(t * 1.5) * 0.3;
+        }
         const spinSpeed = cls === 'dagger' ? 16 : cls === 'scythe' ? 9 : 12;
-        player.group.rotation.y += dt * spinSpeed;
+        player.facing += dt * spinSpeed;
+        player._spinningSkill = true;
 
         // Forward drift differs per class
         const driftSpeed = cls === 'sword' ? 1.8 : cls === 'dagger' ? 2.4 : cls === 'scythe' ? 0.8 : 1.4;

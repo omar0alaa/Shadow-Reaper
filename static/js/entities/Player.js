@@ -427,21 +427,31 @@ export class Player {
         this.position.x = r.x; this.position.z = r.z;
         this.position.y = 0;
 
-        // facing: face mouse forward only when attacking, else toward movement
-        if (move.lengthSq() > 0.001) {
-            this.facing = Math.atan2(move.x, move.z);
+        // facing: skills like Whirlwind / Blade Flurry spin the player and
+        // set _spinningSkill so we don't snap back to mouse / movement facing.
+        if (!this._spinningSkill) {
+            if (move.lengthSq() > 0.001) {
+                this.facing = Math.atan2(move.x, move.z);
+            }
+            if (input.mouse.lmb || this.attackTimer > 0) {
+                this.facing = this.yaw;
+            }
+            if (this.lockTarget && this.lockTarget.alive) {
+                const dx = this.lockTarget.position.x - this.position.x;
+                const dz = this.lockTarget.position.z - this.position.z;
+                this.facing = Math.atan2(dx, dz);
+            }
         }
-        if (input.mouse.lmb || this.attackTimer > 0) {
-            this.facing = this.yaw;
-        }
-        if (this.lockTarget && this.lockTarget.alive) {
-            const dx = this.lockTarget.position.x - this.position.x;
-            const dz = this.lockTarget.position.z - this.position.z;
-            this.facing = Math.atan2(dx, dz);
-        }
+        // Skill resets the flag every frame it's active — clear it now so
+        // it's only honoured for one frame at a time.
+        this._spinningSkill = false;
 
         this.group.position.copy(this.position);
         this.group.rotation.y = this.facing;
+        // Forward-lean visual during a dash, then ease back upright.
+        const dashing = !!this._dashVel;
+        const targetTilt = dashing ? (this.weaponClass === 'bow' ? -0.35 : 0.35) : 0;
+        this.group.rotation.x += (targetTilt - this.group.rotation.x) * Math.min(1, rawDt * 12);
 
         // Limb bobbing while moving
         const t = performance.now() / 1000;
@@ -474,14 +484,69 @@ export class Player {
             this._heavyRelease();
         }
 
-        // Animate sword swing on weaponMount (rotate during swing)
+        // Class-specific weapon-swing animation.
         if (this.attackTimer > 0) {
             const totalDur = this._curSwingDuration || 0.3;
-            const t = 1 - (this.attackTimer / totalDur);
-            this.rArm.rotation.x = -1.4 * Math.sin(Math.PI * t);
-            this.weaponMount.rotation.x = -1.6 * Math.sin(Math.PI * t);
+            const t = 1 - (this.attackTimer / totalDur);   // 0..1 across the swing
+            const swing = Math.sin(Math.PI * t);            // 0..1..0 bell curve
+            const cls = this.weaponClass || 'sword';
+
+            if (cls === 'sword') {
+                // Diagonal slash — swings from upper-right down across the body.
+                this.weaponMount.rotation.z = 0.7 - 1.7 * swing;
+                this.weaponMount.rotation.x = -0.6 * swing;
+                this.weaponMount.rotation.y = -0.3 * swing;
+                this.rArm.rotation.x = -1.5 * swing;
+                this.rArm.rotation.z = -0.5 * swing;
+            } else if (cls === 'dagger') {
+                // Quick forward stab — translate the mount along Z.
+                this.weaponMount.position.set(0.48, 0.95, 0.10 + 0.7 * swing);
+                this.weaponMount.rotation.x = -0.3 * swing;
+                this.rArm.rotation.x = -1.6 * swing;
+                if (this.offhandMount) {
+                    // Off-hand stabs on the opposite half-beat for a flurry feel.
+                    const phase = Math.sin(Math.PI * t + Math.PI / 2);
+                    this.offhandMount.position.set(-0.48, 0.95, 0.10 + 0.6 * Math.max(0, phase));
+                    this.lArm.rotation.x = -1.4 * Math.max(0, phase);
+                }
+            } else if (cls === 'bow') {
+                // Draw the bowstring — left arm pulls back, right arm holds the bow.
+                // Peak draw is ~80% through the wind-up (heavy / charged), then release.
+                const draw = swing;
+                this.lArm.rotation.x = -1.0 * draw;
+                this.lArm.position.z = -0.6 * draw;       // pulled back
+                this.rArm.rotation.x = -0.5;               // bow arm extended forward
+                this.weaponMount.rotation.x = -0.1 * swing;
+            } else if (cls === 'scythe') {
+                // Wide horizontal sweep — rotation around Y.
+                this.weaponMount.rotation.y = 1.4 - 2.8 * swing;
+                this.weaponMount.rotation.x = -0.2 * swing;
+                this.rArm.rotation.x = -1.2 * swing;
+                this.rArm.rotation.z = 0.6 * swing;
+            } else {
+                // Generic vertical chop fallback.
+                this.weaponMount.rotation.x = -1.6 * swing;
+                this.rArm.rotation.x = -1.4 * swing;
+            }
         } else {
-            this.weaponMount.rotation.x *= 0.85;
+            // Ease everything back to neutral pose.
+            this.weaponMount.rotation.x *= 0.78;
+            this.weaponMount.rotation.y *= 0.78;
+            this.weaponMount.rotation.z *= 0.78;
+            // Mount and offhand return to base position
+            const baseX = 0.48, baseY = 0.95, baseZ = 0.10;
+            this.weaponMount.position.x += (baseX - this.weaponMount.position.x) * 0.3;
+            this.weaponMount.position.y += (baseY - this.weaponMount.position.y) * 0.3;
+            this.weaponMount.position.z += (baseZ - this.weaponMount.position.z) * 0.3;
+            if (this.offhandMount) {
+                this.offhandMount.position.x += (-baseX - this.offhandMount.position.x) * 0.3;
+                this.offhandMount.position.y += (baseY - this.offhandMount.position.y) * 0.3;
+                this.offhandMount.position.z += (baseZ - this.offhandMount.position.z) * 0.3;
+            }
+            // Reset arm offsets used during bow draw / sword slash
+            this.rArm.rotation.z *= 0.78;
+            this.lArm.rotation.z *= 0.78;
+            this.lArm.position.z *= 0.78;
         }
 
         // i-frames countdown

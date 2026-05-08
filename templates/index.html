@@ -123,11 +123,19 @@
         <div id="inventoryScreen" class="screen hidden">
             <div class="invPanel">
                 <h2>Inventory</h2>
-                <div id="invWeapon" class="invSection"></div>
-                <h3>Stats</h3>
-                <div id="invStats" class="invSection"></div>
-                <h3>Upgrades Acquired</h3>
-                <div id="invUpgrades" class="invSection"></div>
+                <div class="invCols">
+                    <div class="invCol">
+                        <div id="invWeapon" class="invSection"></div>
+                        <h3>Stats</h3>
+                        <div id="invStats" class="invSection"></div>
+                        <h3>Upgrades Acquired</h3>
+                        <div id="invUpgrades" class="invSection"></div>
+                    </div>
+                    <div class="invCol">
+                        <h3>Skills</h3>
+                        <div id="invSkills" class="invSection"></div>
+                    </div>
+                </div>
                 <button class="menuBtn" id="invClose">Close (Tab)</button>
             </div>
         </div>
