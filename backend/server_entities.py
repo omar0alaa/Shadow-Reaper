@@ -486,6 +486,8 @@ class ServerPlayer:
         self.upgrades.append(upgrade)
 
     def to_state(self) -> dict:
+        # Compact float for skill cooldowns — clients display sweep based on
+        # cd / max_cd. Hardcoded max-cd values match the client's Skill ctor.
         return {
             'pid': self.pid,
             'name': self.name,
@@ -504,6 +506,14 @@ class ServerPlayer:
             'sw': self.swing_kind,
             'wpn': self.weapon_id,
             'combo': self.combo_count,
+            # Cooldowns — clients use these to drive the skill sweep.
+            'cdQ': round(self.cd_q, 2),
+            'cdE': round(self.cd_e, 2),
+            'cdR': round(self.cd_r, 2),
+            # Live stats so the local HUD / inventory reflect upgrades.
+            'stats': dict(self.stats),
+            # Upgrade history (full list — drives Inventory's "Upgrades Acquired").
+            'upgrades': list(self.upgrades),
         }
 
 

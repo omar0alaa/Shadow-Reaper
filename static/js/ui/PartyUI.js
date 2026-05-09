@@ -24,9 +24,11 @@ export class PartyUI {
             if (el) el.addEventListener('click', () => { this.game.audio.uiClick(); fn(); });
         };
 
-        click('mpBack',          () => this._closeAll());
+        // Back from the Host/Join mode-select screen → main menu
+        click('mpBack',          () => this._returnToMainMenu());
         click('mpHostBtn',       () => this._openHost());
         click('mpJoinBtn',       () => this._openJoin());
+        // Back from Host config / Join config → mode-select screen (Host or Join)
         click('mpHostBack',      () => { this._closeAll(); this.show(); });
         click('mpJoinBack',      () => { this._closeAll(); this.show(); });
         click('mpHostConfirm',   () => this._doHost());
@@ -292,6 +294,15 @@ export class PartyUI {
     _leaveLobby() {
         this.game.net.leave();
         this._closeAll();
-        this.show();
+        // Drop back to the main menu — not the Host/Join mode-select screen.
+        this._returnToMainMenu();
+    }
+
+    /** Close all party UI panels and return to the game's main menu. */
+    _returnToMainMenu() {
+        this._closeAll();
+        const menu = document.getElementById('mainMenu');
+        if (menu) menu.classList.remove('hidden');
+        this.game.state = 'menu';
     }
 }

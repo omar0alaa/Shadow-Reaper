@@ -352,6 +352,9 @@ export class Player {
 
     /** Apply a server snapshot in MP mode. */
     _serverApply(ps) {
+        // Detect a fresh swing so we can latch a swing animation timer.
+        const prevSwing = this._serverSwing || 0;
+
         this._serverTargetX = ps.x;
         this._serverTargetZ = ps.z;
         this._serverTargetFacing = ps.f;
@@ -366,6 +369,34 @@ export class Player {
         this.alive = this._serverAlive;
         this.invuln = ps.inv ? 0.1 : 0;
         if (ps.combo !== undefined) this.comboCount = ps.combo;
+
+        // Cooldowns — drive the HUD's radial sweep.
+        if (this.skills) {
+            if (ps.cdQ !== undefined) this.skills.Q.cd = ps.cdQ;
+            if (ps.cdE !== undefined) this.skills.E.cd = ps.cdE;
+            if (ps.cdR !== undefined) this.skills.R.cd = ps.cdR;
+            // Reaper Time / F is energy-gated; energy is updated above.
+        }
+
+        // Live stats so the HUD combo bonus / inventory show real numbers.
+        if (ps.stats && typeof ps.stats === 'object') {
+            Object.assign(this.stats, ps.stats);
+        }
+
+        // Upgrade history — used by InventoryUI's "Upgrades Acquired" panel.
+        if (Array.isArray(ps.upgrades)) {
+            if (!this.game.runState) this.game.runState = {};
+            this.game.runState.upgrades = ps.upgrades;
+        }
+
+        // Latch a brief weapon-mount swing animation when swing rises 0 -> 1/2.
+        if (prevSwing === 0 && this._serverSwing >= 1) {
+            const speed = (this.weapon && this.weapon.speed) || 1.0;
+            const dur = (this._serverSwing === 2 ? 0.55 : 0.34) / speed;
+            this.attackTimer = dur;
+            this._curSwingDuration = dur;
+        }
+
         // Re-equip if server swapped weapon
         if (ps.wpn && ps.wpn !== this.weaponId) {
             this.equipWeapon(ps.wpn);
@@ -433,20 +464,87 @@ export class Player {
             }
             this.group.position.copy(this.position);
             this.group.rotation.y = this.facing;
+
             // Walk-bob based on perceived movement
             const moving = (Math.hypot((this._serverTargetX ?? this.position.x) - this.position.x,
                                        (this._serverTargetZ ?? this.position.z) - this.position.z) > 0.05);
-            const t = performance.now() / 1000;
-            const bob = moving ? Math.sin(t * 9) : 0;
+            const tNow = performance.now() / 1000;
+            const bob = moving ? Math.sin(tNow * 9) : 0;
             if (this.lLeg) this.lLeg.rotation.x = bob * 0.6;
             if (this.rLeg) this.rLeg.rotation.x = -bob * 0.6;
-            if (this._serverSwing > 0) {
-                const swing = (Math.sin(t * 16) + 1) * 0.5;
-                this.rArm.rotation.x = -1.4 * swing;
+
+            // Tick the local swing-animation timer set by _serverApply.
+            if (this.attackTimer > 0) this.attackTimer -= rawDt;
+
+            // Class-specific weapon-swing animation (mirrors the SP path).
+            if (this.attackTimer > 0) {
+                const totalDur = this._curSwingDuration || 0.3;
+                const tProg = 1 - (this.attackTimer / totalDur);
+                const sw = Math.sin(Math.PI * tProg);
+                const cls = this.weaponClass || 'sword';
+                if (cls === 'sword') {
+                    this.weaponMount.rotation.z = 0.7 - 1.7 * sw;
+                    this.weaponMount.rotation.x = -0.6 * sw;
+                    this.weaponMount.rotation.y = -0.3 * sw;
+                    this.rArm.rotation.x = -1.5 * sw;
+                    this.rArm.rotation.z = -0.5 * sw;
+                } else if (cls === 'dagger') {
+                    this.weaponMount.position.set(0.48, 0.95, 0.10 + 0.7 * sw);
+                    this.weaponMount.rotation.x = -0.3 * sw;
+                    this.rArm.rotation.x = -1.6 * sw;
+                    if (this.offhandMount) {
+                        const phase = Math.sin(Math.PI * tProg + Math.PI / 2);
+                        this.offhandMount.position.set(-0.48, 0.95, 0.10 + 0.6 * Math.max(0, phase));
+                        this.lArm.rotation.x = -1.4 * Math.max(0, phase);
+                    }
+                } else if (cls === 'bow') {
+                    this.lArm.rotation.x = -1.0 * sw;
+                    this.lArm.position.z = -0.6 * sw;
+                    this.rArm.rotation.x = -0.5;
+                    this.weaponMount.rotation.x = -0.1 * sw;
+                } else if (cls === 'scythe') {
+                    this.weaponMount.rotation.y = 1.4 - 2.8 * sw;
+                    this.weaponMount.rotation.x = -0.2 * sw;
+                    this.rArm.rotation.x = -1.2 * sw;
+                    this.rArm.rotation.z = 0.6 * sw;
+                } else {
+                    this.weaponMount.rotation.x = -1.6 * sw;
+                    this.rArm.rotation.x = -1.4 * sw;
+                }
+                // Activate the slash trail for the current weapon's color.
+                if (!this._mpTrailLatched) {
+                    this.setTrailActive(totalDur + 0.15, this._weaponTrailColor());
+                    this._mpTrailLatched = true;
+                }
             } else {
+                // Ease back to neutral pose after a swing finishes.
+                this.weaponMount.rotation.x *= 0.78;
+                this.weaponMount.rotation.y *= 0.78;
+                this.weaponMount.rotation.z *= 0.78;
+                const baseX = 0.48, baseY = 0.95, baseZ = 0.10;
+                this.weaponMount.position.x += (baseX - this.weaponMount.position.x) * 0.3;
+                this.weaponMount.position.y += (baseY - this.weaponMount.position.y) * 0.3;
+                this.weaponMount.position.z += (baseZ - this.weaponMount.position.z) * 0.3;
+                if (this.offhandMount) {
+                    this.offhandMount.position.x += (-baseX - this.offhandMount.position.x) * 0.3;
+                    this.offhandMount.position.y += (baseY - this.offhandMount.position.y) * 0.3;
+                    this.offhandMount.position.z += (baseZ - this.offhandMount.position.z) * 0.3;
+                }
+                this.rArm.rotation.z *= 0.78;
+                this.lArm.rotation.z *= 0.78;
+                this.lArm.position.z *= 0.78;
+                // Idle bobbing arms when not swinging.
                 this.lArm.rotation.x = -bob * 0.4;
                 this.rArm.rotation.x = bob * 0.4;
+                this._mpTrailLatched = false;
             }
+
+            // R-skill spin override — server reports swing == 2 while spinning.
+            if (this._serverSwing === 2) {
+                this.facing += rawDt * 12;
+                this.group.rotation.y = this.facing;
+            }
+
             // Hide the mesh while dead.
             this.group.visible = (this._serverAlive !== false);
             this._updateCamera(rawDt);

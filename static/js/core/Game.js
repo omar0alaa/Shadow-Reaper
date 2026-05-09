@@ -562,7 +562,28 @@ export class Game {
             this.audio.skill();
         });
         net.on('fx_dash', (msg) => {
-            // Visual only — handled per-player on dash trail in puppet update.
+            const dashColor = ({ sword: '#3a4a90', dagger: '#3a0a55',
+                                 bow: '#1a4a1a', scythe: '#5a0a0a' })[msg.cls] || '#3a0a55';
+            // Where to spawn the trail particles
+            let pos = null;
+            if (msg.pid === this.myPid && this.player) {
+                pos = this.player.position;
+                this.audio.dash();
+                this.scene.addShake(0.15, 0.2);
+            } else {
+                const rp = this.remotePlayers.get(msg.pid);
+                if (rp) pos = rp.position;
+            }
+            if (!pos) return;
+            // Burst a stream of dark particles for ~0.22s (matches server dash dur)
+            let i = 0;
+            const tick = () => {
+                if (i++ > 6) return;
+                this.particles.spawnBurst(pos.clone().add(new THREE.Vector3(0, 0.8, 0)),
+                                          dashColor, 5, 1.5);
+                setTimeout(tick, 40);
+            };
+            tick();
         });
         net.on('fx_flurry', (msg) => { this.audio.skill(); });
         net.on('fx_heal', (msg) => {
@@ -612,7 +633,14 @@ export class Game {
             };
         });
         net.on('upgrade_picked', (msg) => {
-            // someone (maybe us) finished — server fires next wave when all done.
+            // Apply locally for instant inventory feedback (the next state
+            // snapshot will overwrite anyway, but this covers the gap).
+            if (msg.pid === this.myPid && msg.upgrade) {
+                if (!this.runState) this.runState = {};
+                this.runState.upgrades = this.runState.upgrades || [];
+                this.runState.upgrades.push(msg.upgrade);
+                this.audio.levelup && this.audio.levelup();
+            }
         });
 
         net.on('weapon_offer', (msg) => {

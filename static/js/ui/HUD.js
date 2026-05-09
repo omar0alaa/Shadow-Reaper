@@ -82,8 +82,14 @@ export class HUD {
         this.energyBar.style.width = (this._lerp.en * 100).toFixed(1) + '%';
         this.healthText.textContent = `${Math.ceil(p.health)} / ${Math.floor(p.maxHealth)}`;
 
-        // wave info
-        const aliveEnemies = g.enemies.filter(e => e.alive).length;
+        // wave info — in MP, enemies live in g.serverEnemies (Map of puppets);
+        // in SP they're in g.enemies (array).
+        let aliveEnemies = 0;
+        if (g.netMode === 'mp' && g.serverEnemies) {
+            for (const e of g.serverEnemies.values()) if (e.alive) aliveEnemies++;
+        } else {
+            aliveEnemies = g.enemies.filter(e => e.alive).length;
+        }
         if (g.waveData && g.waveData.is_boss_wave) {
             this.waveBanner.textContent = `WAVE ${g.wave} — BOSS`;
         } else if (g.waveData && g.waveData.is_miniboss_wave) {
