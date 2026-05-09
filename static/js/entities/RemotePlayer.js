@@ -17,6 +17,7 @@ export class RemotePlayer {
         this.pid = pid;
         this.name = info.name || 'Player';
         this.weaponClass = info.class || 'sword';
+        this.weaponId = info.weaponId || `${this.weaponClass}_common`;
 
         this.position = new THREE.Vector3(0, 0, 0);
         this.targetPos = new THREE.Vector3(0, 0, 0);
@@ -24,11 +25,14 @@ export class RemotePlayer {
         this.targetFacing = 0;
         this.lastUpdate = performance.now();
         this.alive = true;
-        this._swingTimer = 0;
+        this._swingTimer = 0;        // counts UP from 0 to swingDur
+        this._swingDur = 0;          // total swing duration
+        this._swingHeavy = false;    // server reported swing kind 2
         this._spinning = false;
         this._spinAngle = 0;
 
         this._buildMesh();
+        this._buildWeaponMesh();
         this._buildNamePlate();
     }
 
@@ -75,11 +79,14 @@ export class RemotePlayer {
         this.group.add(lArm); this.group.add(rArm);
         this.lArm = lArm; this.rArm = rArm;
 
-        // simple weapon stub colored by class
-        const wpnMat = new THREE.MeshStandardMaterial({ color: tint, metalness: 0.7, roughness: 0.3 });
-        const blade = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.06, 0.9), wpnMat);
-        blade.position.set(0.48, 0.95, 0.55);
-        this.group.add(blade);
+        // weapon mount — actual mesh is built in _buildWeaponMesh from the
+        // server-reported weapon ID.
+        this.weaponMount = new THREE.Group();
+        this.weaponMount.position.set(0.48, 0.95, 0.10);
+        this.group.add(this.weaponMount);
+        this._weaponBaseTransform = {
+            x: 0.48, y: 0.95, z: 0.10,
+        };
 
         // colored ring under foot to identify allies
         const ring = new THREE.Mesh(
@@ -90,6 +97,76 @@ export class RemotePlayer {
         ring.position.y = 0.04;
         this.group.add(ring);
         this._ring = ring;
+    }
+
+    /** Build / rebuild the weapon mesh from the current weaponId. Mirrors
+     *  Player._buildWeaponMesh so peers see the right shape for each class. */
+    _buildWeaponMesh() {
+        // Tear down current weapon mount + offhand mount.
+        while (this.weaponMount.children.length) {
+            const c = this.weaponMount.children.pop();
+            this.weaponMount.remove(c);
+            if (c.geometry) c.geometry.dispose();
+            if (c.material) c.material.dispose && c.material.dispose();
+        }
+        if (this.offhandMount) {
+            this.group.remove(this.offhandMount);
+            this.offhandMount.traverse(o => {
+                if (o.geometry) o.geometry.dispose();
+                if (o.material) o.material.dispose && o.material.dispose();
+            });
+            this.offhandMount = null;
+        }
+
+        const w = (this.game.weaponData || {})[this.weaponId];
+        if (!w) return;
+        const mat = new THREE.MeshStandardMaterial({
+            color: w.color || '#aaaaaa',
+            metalness: 0.85,
+            roughness: 0.25,
+            emissive: new THREE.Color(w.color || '#aaaaaa').multiplyScalar(0.15),
+        });
+        if (w.type === 'dual_fast') {
+            const d1 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.7), mat);
+            d1.position.set(0, 0, 0.35); d1.castShadow = true;
+            this.weaponMount.add(d1);
+            this.offhandMount = new THREE.Group();
+            this.offhandMount.position.set(-0.48, 0.95, 0.10);
+            const d2 = d1.clone();
+            this.offhandMount.add(d2);
+            this.group.add(this.offhandMount);
+        } else if (w.type === 'melee_heavy' || w.type === 'melee_balanced') {
+            const len = w.type === 'melee_balanced' ? 1.05 : 1.4;
+            const blade = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.06, len), mat);
+            blade.position.set(0, 0, len * 0.5); blade.castShadow = true;
+            this.weaponMount.add(blade);
+            const guard = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.14, 0.08), mat);
+            guard.position.set(0, 0, 0);
+            this.weaponMount.add(guard);
+        } else if (w.type === 'ranged') {
+            const bow = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.04, 8, 24, Math.PI * 1.4), mat);
+            bow.rotation.set(0, Math.PI / 2, 0);
+            bow.position.set(0, 0, 0.2);
+            this.weaponMount.add(bow);
+        } else if (w.type === 'melee_aoe') {
+            const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.6, 6),
+                                         new THREE.MeshStandardMaterial({ color: 0x2a1010 }));
+            shaft.rotation.x = Math.PI / 2;
+            shaft.position.set(0, 0, 0.8);
+            this.weaponMount.add(shaft);
+            const blade = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.05, 0.18), mat);
+            blade.position.set(0.4, 0, 1.4);
+            blade.rotation.y = -0.5;
+            this.weaponMount.add(blade);
+        } else {
+            const blade = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.06, 0.55), mat);
+            blade.position.set(0, 0, 0.25); blade.castShadow = true;
+            this.weaponMount.add(blade);
+            const guard = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.1, 0.06), mat);
+            guard.position.set(0, 0, 0);
+            this.weaponMount.add(guard);
+        }
+        this._weaponSpeed = (w && w.speed) || 1.0;
     }
 
     _buildNamePlate() {
@@ -132,14 +209,30 @@ export class RemotePlayer {
             const c = new THREE.Color(CLASS_COLOR[state.cls] || 0xa0a0a0);
             if (this._ring) this._ring.material.color.copy(c);
         }
+        // Weapon swap — rebuild the mount mesh.
+        if (state.weaponId && state.weaponId !== this.weaponId) {
+            this.weaponId = state.weaponId;
+            this._buildWeaponMesh();
+        }
+        // Swing kinds (server): 0 idle, 1 light, 2 heavy, 3 R-skill spin.
+        // Latch a fresh swing animation on a 0→{1,2} transition.
         if (state.swing !== undefined) {
-            if (state.swing === 1 && this._swingTimer < 0.15) this._swingTimer = 0.35;
-            this._spinning = (state.swing === 2);
+            const sw = state.swing | 0;
+            const prev = this._lastSwing | 0;
+            if (sw === 1 || sw === 2) {
+                if (prev !== sw && this._swingTimer <= 0) {
+                    const speed = this._weaponSpeed || 1.0;
+                    this._swingDur = (sw === 2 ? 0.55 : 0.34) / speed;
+                    this._swingTimer = this._swingDur;
+                    this._swingHeavy = (sw === 2);
+                }
+            }
+            this._spinning = (sw === 3);
+            this._lastSwing = sw;
         }
         if (state.alive !== undefined) {
             const wasAlive = this.alive;
             this.alive = state.alive !== false;
-            // Toggle visibility to match life state.
             if (this.group) this.group.visible = this.alive;
             if (wasAlive && !this.alive && this._namePlate) {
                 // Tint the name plate when dead — visible only on revive.
@@ -171,22 +264,74 @@ export class RemotePlayer {
         const t = performance.now() / 1000;
         const moving = Math.hypot(this.targetPos.x - this.position.x, this.targetPos.z - this.position.z) > 0.05;
 
-        // Swing animation latch (visible for ~0.35s after each swing event)
+        // Swing / spin / idle animations — class-specific so the off-hand
+        // dagger flicks, the bow draws, etc., the same as Player.update.
+        const base = this._weaponBaseTransform || { x: 0.48, y: 0.95, z: 0.10 };
         if (this._swingTimer > 0) {
             this._swingTimer -= dt;
-            const phase = 1 - Math.max(0, this._swingTimer / 0.35);
-            const s = Math.sin(Math.PI * phase);
-            this.rArm.rotation.x = -1.4 * s;
-            this.rArm.rotation.z = -0.4 * s;
+            const totalDur = this._swingDur || 0.34;
+            const tProg = 1 - Math.max(0, this._swingTimer / totalDur);
+            const s = Math.sin(Math.PI * tProg);
+            const cls = this.weaponClass || 'sword';
+            if (this.weaponMount) {
+                if (cls === 'sword') {
+                    this.weaponMount.rotation.z = 0.7 - 1.7 * s;
+                    this.weaponMount.rotation.x = -0.6 * s;
+                    this.weaponMount.rotation.y = -0.3 * s;
+                    this.rArm.rotation.x = -1.5 * s;
+                    this.rArm.rotation.z = -0.5 * s;
+                } else if (cls === 'dagger') {
+                    this.weaponMount.position.set(base.x, base.y, base.z + 0.7 * s);
+                    this.weaponMount.rotation.x = -0.3 * s;
+                    this.rArm.rotation.x = -1.6 * s;
+                    if (this.offhandMount) {
+                        const phase = Math.sin(Math.PI * tProg + Math.PI / 2);
+                        this.offhandMount.position.set(-base.x, base.y, base.z + 0.6 * Math.max(0, phase));
+                        this.lArm.rotation.x = -1.4 * Math.max(0, phase);
+                    }
+                } else if (cls === 'bow') {
+                    this.lArm.rotation.x = -1.0 * s;
+                    this.lArm.position.z = -0.6 * s;
+                    this.rArm.rotation.x = -0.5;
+                    this.weaponMount.rotation.x = -0.1 * s;
+                } else if (cls === 'scythe') {
+                    this.weaponMount.rotation.y = 1.4 - 2.8 * s;
+                    this.weaponMount.rotation.x = -0.2 * s;
+                    this.rArm.rotation.x = -1.2 * s;
+                    this.rArm.rotation.z = 0.6 * s;
+                } else {
+                    this.weaponMount.rotation.x = -1.6 * s;
+                    this.rArm.rotation.x = -1.4 * s;
+                }
+            }
         } else if (this._spinning) {
+            // R-skill spin: server already rotates the group via `facing`,
+            // we just hold an attack-ready pose.
             this.rArm.rotation.x = -1.0 - Math.sin(t * 12) * 0.3;
             this.rArm.rotation.z = -0.4;
             this.lArm.rotation.x = -0.5 + Math.cos(t * 12) * 0.3;
+            if (this.weaponMount) this.weaponMount.rotation.z = 0.4;
         } else {
+            // Ease back to neutral pose.
+            if (this.weaponMount) {
+                this.weaponMount.rotation.x *= 0.78;
+                this.weaponMount.rotation.y *= 0.78;
+                this.weaponMount.rotation.z *= 0.78;
+                this.weaponMount.position.x += (base.x - this.weaponMount.position.x) * 0.3;
+                this.weaponMount.position.y += (base.y - this.weaponMount.position.y) * 0.3;
+                this.weaponMount.position.z += (base.z - this.weaponMount.position.z) * 0.3;
+            }
+            if (this.offhandMount) {
+                this.offhandMount.position.x += (-base.x - this.offhandMount.position.x) * 0.3;
+                this.offhandMount.position.y += (base.y - this.offhandMount.position.y) * 0.3;
+                this.offhandMount.position.z += (base.z - this.offhandMount.position.z) * 0.3;
+            }
             const bob = moving ? Math.sin(t * 9) : 0;
             this.lArm.rotation.x = -bob * 0.4;
             this.rArm.rotation.x = bob * 0.4;
-            this.rArm.rotation.z = 0;
+            this.rArm.rotation.z *= 0.78;
+            this.lArm.rotation.z *= 0.78;
+            this.lArm.position.z *= 0.78;
         }
 
         const bob = moving ? Math.sin(t * 9) : 0;

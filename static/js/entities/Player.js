@@ -386,7 +386,12 @@ export class Player {
                 const sv = Number(ps.cdR) || 0;
                 this.skills.R.cd = Math.max(sv, this.skills.R.cd);
             }
-            // Reaper Time / F is energy-gated; energy is updated above.
+            // Reaper Time / F is energy-gated. Mirror its active flag from
+            // the server so the HUD treats it as not-ready while running.
+            if (ps.ult !== undefined && this.skills.F) {
+                this.skills.F.active = !!ps.ult;
+                this.ultActive = !!ps.ult;
+            }
         }
 
         // Live stats so the HUD combo bonus / inventory show real numbers.
@@ -559,8 +564,8 @@ export class Player {
                 this._mpTrailLatched = false;
             }
 
-            // R-skill spin override — server reports swing == 2 while spinning.
-            if (this._serverSwing === 2) {
+            // R-skill spin override — server reports swing == 3 while spinning.
+            if (this._serverSwing === 3) {
                 this.facing += rawDt * 12;
                 this.group.rotation.y = this.facing;
             }

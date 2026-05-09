@@ -626,6 +626,28 @@ export class Game {
             tick();
         });
         net.on('fx_flurry', (msg) => { this.audio.skill(); });
+        net.on('fx_ult', (msg) => {
+            if (msg.pid === this.myPid) {
+                this.audio.ult();
+                this.scene.addShake(0.4, 0.5);
+                this.scene.setUltimatePost(true);
+                this.hud.toast('REAPER TIME');
+                if (this.player) this.player.ultActive = true;
+            } else {
+                // Mark the puppet so we can show a brief aura particle.
+                const rp = this.remotePlayers.get(msg.pid);
+                if (rp && rp.position) {
+                    this.particles.spawnBurst(rp.position.clone().add(new THREE.Vector3(0, 1, 0)),
+                                              '#a45cff', 32, 4);
+                }
+            }
+        });
+        net.on('fx_ult_end', (msg) => {
+            if (msg.pid === this.myPid) {
+                this.scene.setUltimatePost(false);
+                if (this.player) this.player.ultActive = false;
+            }
+        });
         net.on('fx_heal', (msg) => {
             const rp = this.remotePlayers.get(msg.pid);
             if (rp) this.dmgNumbers.spawn(rp.position.clone().add(new THREE.Vector3(0, 1.6, 0)), msg.amt, { kind: 'heal' });
@@ -778,12 +800,15 @@ export class Game {
             } else {
                 let rp = this.remotePlayers.get(ps.pid);
                 if (!rp) {
-                    rp = new RemotePlayer(this, ps.pid, { name: ps.name, class: ps.cls });
+                    rp = new RemotePlayer(this, ps.pid, {
+                        name: ps.name, class: ps.cls, weaponId: ps.wpn,
+                    });
                     this.remotePlayers.set(ps.pid, rp);
                 }
                 rp.applyState({
                     x: ps.x, z: ps.z, facing: ps.f,
                     cls: ps.cls,
+                    weaponId: ps.wpn,
                     swing: ps.sw,
                     alive: ps.alive,
                 });

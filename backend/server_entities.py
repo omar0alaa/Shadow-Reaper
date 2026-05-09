@@ -62,6 +62,9 @@ class ServerPlayer:
         self.r_tick = 0.0
         self.stealth_until = 0.0
         self.stealth_first_strike = False
+        # Ultimate (F / Reaper Time)
+        self.ult_active = False
+        self.ult_time = 0.0
         # Stats (upgrades modify)
         self.stats = {
             'crit_chance': 0.10, 'crit_damage': 1.5,
@@ -165,7 +168,14 @@ class ServerPlayer:
             self._try_flurry(game)
         if self.input_f:
             self.input_f = False
-            # Ult is a no-op server-side for now (flag could be added)
+            self._try_ult(game)
+        # Tick ult duration
+        if self.ult_active:
+            self.ult_time -= dt
+            if self.ult_time <= 0:
+                self.ult_active = False
+                self.ult_time = 0.0
+                game.broadcast({'type': 'fx_ult_end', 'pid': self.pid})
 
         # Movement (dash overrides)
         if self.dash_active:
@@ -392,6 +402,20 @@ class ServerPlayer:
         game.broadcast({'type': 'fx_smoke', 'pid': self.pid,
                         'x': self.x, 'z': self.z})
 
+    def _try_ult(self, game):
+        """Reaper Time ultimate. Energy-gated, no raw cooldown."""
+        if self.ult_active:
+            return
+        if self.energy < self.max_energy:
+            return
+        self.energy = 0
+        self.ult_active = True
+        self.ult_time = 6.0 + float(self.stats.get('ult_duration', 0) or 0)
+        game.broadcast({
+            'type': 'fx_ult', 'pid': self.pid, 'cls': self.cls,
+            'duration': round(self.ult_time, 2),
+        })
+
     def _try_flurry(self, game):
         if self.cd_r > 0 or self.r_active: return
         self.cd_r = 10.0
@@ -510,6 +534,8 @@ class ServerPlayer:
             'cdQ': round(self.cd_q, 2),
             'cdE': round(self.cd_e, 2),
             'cdR': round(self.cd_r, 2),
+            'ult': bool(self.ult_active),
+            'ultT': round(self.ult_time, 2),
             # Live stats so the local HUD / inventory reflect upgrades.
             'stats': dict(self.stats),
             # Upgrade history (full list — drives Inventory's "Upgrades Acquired").
@@ -752,14 +778,23 @@ class ServerProjectile:
                     if self.pierce:
                         continue
                     if self.ricochet > 0:
-                        # bounce to nearest unhit
-                        cands = [(eid2, en) for eid2, en in game.enemies.items()
-                                 if en.alive and eid2 not in self.hit_set]
+                        # Bounce to nearest unhit enemy WITHIN reach. Without a
+                        # range cap the projectile would teleport across the
+                        # whole arena and hit somebody on the other side.
+                        RICOCHET_REACH = 8.0
+                        cands = []
+                        for eid2, en in game.enemies.items():
+                            if not en.alive or eid2 in self.hit_set:
+                                continue
+                            d = math.hypot(en.x - self.x, en.z - self.z)
+                            if d < RICOCHET_REACH:
+                                cands.append((d, en))
                         if not cands:
                             self.dead = True; return
-                        cands.sort(key=lambda kv: math.hypot(kv[1].x - self.x, kv[1].z - self.z))
-                        nx = cands[0][1].x - self.x
-                        nz = cands[0][1].z - self.z
+                        cands.sort(key=lambda kv: kv[0])
+                        target = cands[0][1]
+                        nx = target.x - self.x
+                        nz = target.z - self.z
                         L = math.hypot(nx, nz) or 1
                         self.dx, self.dz = nx / L, nz / L
                         self.ricochet -= 1

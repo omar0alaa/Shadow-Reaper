@@ -381,14 +381,19 @@ class ServerGame:
         for sp in list(self.players.values()):
             sp.step(dt, self)
 
+        # If anyone is in Reaper Time, enemies + their projectiles tick slow.
+        ult_active = any(getattr(sp, 'ult_active', False) for sp in self.players.values())
+        enemy_dt = dt * 0.4 if ult_active else dt
+
         # 2) Enemy updates (only if any wave is active)
         if self.enemies:
             for e in list(self.enemies.values()):
-                e.step(dt, self)
+                e.step(enemy_dt, self)
 
-        # 3) Projectile updates
+        # 3) Projectile updates — only enemy projectiles get slowed.
         for p in list(self.projectiles):
-            p.step(dt, self)
+            p_dt = enemy_dt if (p.owner_eid is not None) else dt
+            p.step(p_dt, self)
         self.projectiles = [p for p in self.projectiles if not p.dead]
 
         # 4) Loot pickups (player walks over)
@@ -455,8 +460,11 @@ class ServerGame:
                 ls = sp.stats.get('lifesteal', 0) + (mods.get('lifesteal') or 0)
                 if ls > 0:
                     sp.heal(amount * ls, self)
-                # Chain lightning
-                if sp.stats.get('chain_lightning', 0) > 0:
+                # Chain lightning — only triggers on the *initial* hit, not on
+                # damage that itself came from lightning/explosion (otherwise
+                # two enemies would ping-pong damage forever).
+                if (sp.stats.get('chain_lightning', 0) > 0
+                        and info.get('source') not in ('lightning', 'explosion')):
                     self._chain_lightning(e, amount * 0.5, 2, sp.pid)
         # Enemy died?
         if not e.alive:
