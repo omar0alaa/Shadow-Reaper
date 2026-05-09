@@ -484,3 +484,187 @@ body.locked { cursor: none; }
     color: rgba(217,178,90,.7);
     margin-top: 2px;
 }
+
+/* ---------- Multiplayer party UI ---------- */
+.mpModeRow { display: flex; gap: 24px; margin-top: 16px; }
+.mpHostBig, .mpJoinBig { padding: 28px 60px; font-size: 18px; }
+
+.mpForm {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    background: linear-gradient(180deg, #0d0916, #050309);
+    border: 1px solid rgba(197,37,47,.4);
+    padding: 24px 28px;
+    min-width: 480px;
+    max-width: 90vw;
+    box-shadow: 0 20px 60px rgba(0,0,0,.8);
+}
+.mpForm label {
+    font-family: 'Cinzel', serif;
+    letter-spacing: .15em;
+    font-size: 12px;
+    color: var(--gold);
+    text-transform: uppercase;
+    margin-top: 8px;
+}
+.mpForm input[type=text] {
+    background: rgba(0,0,0,0.5);
+    border: 1px solid rgba(255,255,255,0.18);
+    color: var(--text);
+    padding: 10px 14px;
+    font-family: 'Inter', sans-serif;
+    font-size: 16px;
+    letter-spacing: .1em;
+}
+#mpJoinCode {
+    font-family: 'Cinzel', serif;
+    font-size: 26px;
+    font-weight: 900;
+    text-align: center;
+    letter-spacing: .5em;
+    text-transform: uppercase;
+}
+.mpForm input[type=text]:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 14px rgba(197,37,47,.4);
+}
+
+.diffRow { display: flex; gap: 8px; }
+.diffBtn {
+    flex: 1;
+    background: rgba(0,0,0,0.4);
+    border: 1px solid rgba(255,255,255,0.12);
+    color: var(--text-dim);
+    padding: 8px 14px;
+    font-family: 'Cinzel', serif;
+    letter-spacing: .15em;
+    text-transform: uppercase;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all .15s;
+}
+.diffBtn:hover:not(:disabled) { border-color: var(--accent); color: var(--text); }
+.diffBtn.active {
+    border-color: var(--gold);
+    color: var(--gold);
+    box-shadow: 0 0 12px rgba(217,178,90,.4);
+    background: rgba(217,178,90,.08);
+}
+.diffBtn:disabled { cursor: not-allowed; }
+
+.mpClassRow {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+.mpClassRow .classCard {
+    width: 130px;
+    min-height: 150px;
+    padding: 12px 8px;
+    gap: 6px;
+}
+.mpClassRow .classCard .classGlyph { font-size: 32px; }
+.mpClassRow .classCard .classTitle { font-size: 14px; }
+.mpClassRow .classCard .classStats { font-size: 10px; }
+.mpClassRow .classCard.active {
+    border-color: var(--gold);
+    box-shadow: 0 0 22px rgba(217,178,90,.55);
+}
+
+/* Lobby */
+.mpLobbyTop {
+    display: flex;
+    gap: 36px;
+    font-family: 'Cinzel', serif;
+    letter-spacing: .15em;
+    color: var(--text-dim);
+    font-size: 14px;
+    margin-bottom: 14px;
+}
+.mpLobbyTop b { color: var(--gold); font-size: 18px; }
+.mpLobbyList {
+    display: flex; flex-direction: column;
+    gap: 6px;
+    background: rgba(0,0,0,0.45);
+    border: 1px solid rgba(255,255,255,0.12);
+    padding: 12px;
+    min-width: 480px;
+    max-width: 80vw;
+}
+.lobbyRow {
+    display: grid;
+    grid-template-columns: 36px 1fr 90px;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 10px;
+    border-left: 3px solid rgba(255,255,255,.18);
+    background: rgba(255,255,255,0.02);
+}
+.lobbyRow.sword  { border-left-color: #6a85b8; }
+.lobbyRow.dagger { border-left-color: #9a72d8; }
+.lobbyRow.bow    { border-left-color: #6dd66d; }
+.lobbyRow.scythe { border-left-color: #d04848; }
+.lobbyGlyph { font-family: 'Cinzel', serif; font-size: 22px; text-align: center; }
+.lobbyName  { font-family: 'Inter', sans-serif; font-size: 14px; }
+.lobbyClass { font-family: 'Cinzel', serif; letter-spacing: .15em; font-size: 11px; color: var(--text-dim); text-align: right; }
+.lobbyHost {
+    display: inline-block; font-size: 9px;
+    background: var(--gold); color: #1a0a05;
+    padding: 1px 6px; border-radius: 2px;
+    margin-left: 6px; vertical-align: middle;
+    font-family: 'Cinzel', serif; letter-spacing: .15em;
+}
+
+.mpLobbySwap { margin-top: 14px; min-width: 480px; max-width: 80vw; }
+.mpLabel {
+    font-family: 'Cinzel', serif;
+    letter-spacing: .15em;
+    font-size: 11px;
+    color: var(--gold);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+}
+.mpClassSwap { display: flex; gap: 8px; }
+.lobbyClassBtn {
+    flex: 1;
+    background: rgba(0,0,0,0.4);
+    border: 1px solid rgba(255,255,255,0.12);
+    color: var(--text-dim);
+    padding: 8px 12px;
+    font-family: 'Cinzel', serif;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all .15s;
+}
+.lobbyClassBtn:hover { color: var(--text); }
+.lobbyClassBtn.sword.active  { border-color: #6a85b8; box-shadow: 0 0 14px rgba(106,133,184,.45); color: #cfd8ff; }
+.lobbyClassBtn.dagger.active { border-color: #9a72d8; box-shadow: 0 0 14px rgba(154,114,216,.45); color: #d8c0ff; }
+.lobbyClassBtn.bow.active    { border-color: #6dd66d; box-shadow: 0 0 14px rgba(109,214,109,.45); color: #cfffd0; }
+.lobbyClassBtn.scythe.active { border-color: #d04848; box-shadow: 0 0 14px rgba(208,72,72,.45); color: #ffc8c8; }
+
+/* Clickable lobby code */
+.mpCodeCopy {
+    cursor: pointer;
+    padding: 2px 8px;
+    border: 1px dashed transparent;
+    transition: border-color .15s, color .15s, transform .15s;
+}
+.mpCodeCopy:hover {
+    border-color: rgba(217,178,90,.5);
+    color: var(--gold);
+    transform: scale(1.04);
+}
+.mpCodeCopy::after {
+    content: ' 📋';
+    opacity: .6;
+    font-size: 14px;
+}
+.mpCodeCopy.flash {
+    color: #6dd66d !important;
+    border-color: rgba(109,214,109,.7) !important;
+}

@@ -17,10 +17,11 @@ export class MainMenu {
             this.game.audio.uiClick(); fn();
         });
 
-        btn('btnNewRun',   () => this._promptDifficulty());
-        btn('btnContinue', () => this._continue());
-        btn('btnSettings', () => this._openSettings());
-        btn('btnQuit',     () => this._quit());
+        btn('btnNewRun',     () => this._promptDifficulty());
+        btn('btnMultiplayer',() => this._openMultiplayer());
+        btn('btnContinue',   () => this._continue());
+        btn('btnSettings',   () => this._openSettings());
+        btn('btnQuit',       () => this._quit());
 
         // Settings modal
         document.getElementById('settingsClose').addEventListener('click', async () => {
@@ -174,6 +175,11 @@ export class MainMenu {
                 body: JSON.stringify(s),
             });
         } catch(e) {}
+    }
+
+    _openMultiplayer() {
+        this.menu.classList.add('hidden');
+        if (this.game.partyUI) this.game.partyUI.show();
     }
 
     _quit() {

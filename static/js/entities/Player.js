@@ -67,6 +67,7 @@ export class Player {
         this.heavyWindup = 0;
         this.heavyActive = false;
         this.invuln = 0;          // i-frames
+        this.alive = true;        // false = spectator (MP) / death screen (SP)
         this.bleedStacksDealt = new WeakMap();
 
         // lock-on
@@ -349,8 +350,31 @@ export class Player {
 
     isRanged() { return this.weapon && this.weapon.type === 'ranged'; }
 
+    /** Apply a server snapshot in MP mode. */
+    _serverApply(ps) {
+        this._serverTargetX = ps.x;
+        this._serverTargetZ = ps.z;
+        this._serverTargetFacing = ps.f;
+        this._serverSwing = ps.sw || 0;
+        this._serverAlive = ps.alive !== false;
+        this.health = ps.hp;
+        this.maxHealth = ps.max_hp;
+        this.stamina = ps.st;
+        this.maxStamina = ps.max_st;
+        this.energy = ps.en;
+        this.maxEnergy = ps.max_en;
+        this.alive = this._serverAlive;
+        this.invuln = ps.inv ? 0.1 : 0;
+        if (ps.combo !== undefined) this.comboCount = ps.combo;
+        // Re-equip if server swapped weapon
+        if (ps.wpn && ps.wpn !== this.weaponId) {
+            this.equipWeapon(ps.wpn);
+        }
+    }
+
     // ---- damage IO ----
     takeDamage(amount, source) {
+        if (!this.alive) return false;
         if (this.invuln > 0) return false;
         this.health -= amount;
         this.invuln = 0.8; // increased i-frames
@@ -359,9 +383,26 @@ export class Player {
         this.game.dmgNumbers.spawn(this.position.clone().add(new THREE.Vector3(0, 1.6, 0)), Math.floor(amount), { kind: 'player' });
         if (this.health <= 0) {
             this.health = 0;
+            this.alive = false;
             this.game.onPlayerDied();
         }
         return true;
+    }
+
+    /** Bring the player back to life — used in MP wave-clear revives. */
+    revive(pos) {
+        this.alive = true;
+        this.health = this.maxHealth;
+        this.invuln = 1.5;
+        if (pos) {
+            this.position.copy(pos);
+            this.position.y = 0;
+        }
+        this.group.visible = true;
+        // Reset combat timers so they can attack immediately.
+        this.attackTimer = 0;
+        this.comboCount = 0;
+        this.comboTimer = 0;
     }
 
     heal(a) {
@@ -377,6 +418,48 @@ export class Player {
         const mouse = input.consumeMouse();
         const sens = input.sensitivity;
         this.yaw -= mouse.dx * sens;
+
+        // Multiplayer: server-driven. We only update camera + animation here.
+        // (Buttons are sampled in Game._loop and sent via _netInputTick.)
+        if (this._mp) {
+            // Smooth-lerp toward the last server-applied target position.
+            if (this._serverTargetX !== undefined) {
+                this.position.x += (this._serverTargetX - this.position.x) * Math.min(1, rawDt * 16);
+                this.position.z += (this._serverTargetZ - this.position.z) * Math.min(1, rawDt * 16);
+                let df = (this._serverTargetFacing ?? this.facing) - this.facing;
+                while (df >  Math.PI) df -= Math.PI * 2;
+                while (df < -Math.PI) df += Math.PI * 2;
+                this.facing += df * Math.min(1, rawDt * 14);
+            }
+            this.group.position.copy(this.position);
+            this.group.rotation.y = this.facing;
+            // Walk-bob based on perceived movement
+            const moving = (Math.hypot((this._serverTargetX ?? this.position.x) - this.position.x,
+                                       (this._serverTargetZ ?? this.position.z) - this.position.z) > 0.05);
+            const t = performance.now() / 1000;
+            const bob = moving ? Math.sin(t * 9) : 0;
+            if (this.lLeg) this.lLeg.rotation.x = bob * 0.6;
+            if (this.rLeg) this.rLeg.rotation.x = -bob * 0.6;
+            if (this._serverSwing > 0) {
+                const swing = (Math.sin(t * 16) + 1) * 0.5;
+                this.rArm.rotation.x = -1.4 * swing;
+            } else {
+                this.lArm.rotation.x = -bob * 0.4;
+                this.rArm.rotation.x = bob * 0.4;
+            }
+            // Hide the mesh while dead.
+            this.group.visible = (this._serverAlive !== false);
+            this._updateCamera(rawDt);
+            this._updateTrail(rawDt);
+            return;
+        }
+
+        // Spectator mode: dead but party still alive — let the camera rotate
+        // and follow the last position, but no movement / attacks / skills.
+        if (!this.alive) {
+            this._updateCamera(rawDt);
+            return;
+        }
 
         if (input.pressed('KeyL')) this._cycleLockOn();
 
@@ -636,14 +719,30 @@ export class Player {
         if (this.weapon && this.weapon.modifies && this.weapon.modifies.heavy_wave) {
             const fwd = new THREE.Vector3(Math.sin(this.facing), 0, Math.cos(this.facing));
             const start = this.position.clone().add(fwd.clone().multiplyScalar(1.2)).add(new THREE.Vector3(0, 1.1, 0));
-            const proj = new Projectile(this.game, {
+            const opts = {
                 origin: start, direction: fwd, speed: 22,
                 damage: this.weapon.damage * 1.4, life: 1.4,
                 color: this.weapon.color || '#7fdaff', size: 0.55, fromPlayer: true, kind: 'wave',
-            });
+            };
+            const proj = new Projectile(this.game, opts);
             this.game.projectiles.push(proj);
             this.game.audio.skill();
+            this._broadcastProjectile(opts);
         }
+    }
+
+    /** Broadcast a projectile spawn so other party members can render it as
+     *  a ghost (visual-only — they don't compute hits). */
+    _broadcastProjectile(opts) {
+        if (!this.game.net || !this.game.net.connected) return;
+        if (this.game.netMode === 'sp') return;
+        this.game.net.send('projectile_spawn', {
+            ox: opts.origin.x, oy: opts.origin.y, oz: opts.origin.z,
+            dx: opts.direction.x, dz: opts.direction.z,
+            speed: opts.speed, damage: opts.damage, life: opts.life,
+            color: opts.color, size: opts.size, kind: opts.kind,
+            pierce: !!opts.pierce, ricochet: opts.ricochet || 0,
+        });
     }
 
     _fireArrow(charged) {
@@ -678,13 +777,15 @@ export class Player {
                 0,
                 baseDir.x * s + baseDir.z * c,
             );
-            const proj = new Projectile(this.game, {
+            const opts = {
                 origin: start.clone(), direction: dir, speed: 36, damage: dmg,
                 life: 2.5, color: w.color || '#9bff9b', size: 0.18,
                 fromPlayer: true, kind: 'arrow',
                 pierce, ricochet: ricochet + autoRic,
-            });
+            };
+            const proj = new Projectile(this.game, opts);
             this.game.projectiles.push(proj);
+            this._broadcastProjectile(opts);
         }
     }
 

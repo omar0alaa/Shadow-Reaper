@@ -138,6 +138,33 @@ export class CombatSystem {
 
     applyDamage(enemy, amount, info = {}) {
         if (!enemy.alive) return;
+        // Multiplayer peer: don't mutate puppet HP locally — send the hit to
+        // the host who is authoritative. We still play feedback FX for the peer.
+        if (this.game.netMode === 'peer' && info.fromPlayer && enemy.netId) {
+            this.game.net.send('attack_hit', {
+                id: enemy.netId,
+                dmg: amount,
+                source: info.source || 'attack',
+            });
+            // Local feedback only (numbers/sparks/sound)
+            const pos = enemy.position.clone().add(new THREE.Vector3(0, 1.7, 0));
+            this.game.dmgNumbers.spawn(pos, Math.floor(amount), {
+                kind: info.crit ? 'crit' : (info.backstab ? 'crit' : 'normal'),
+            });
+            if (info.crit) this.game.audio.crit(); else this.game.audio.hit();
+            this.game.particles.spawnSparks(pos, info.crit ? '#ffd166' : '#ffeecf', info.crit ? 16 : 8);
+            // Track player combo + lifesteal locally so feel doesn't depend on RTT.
+            const player = this.game.player;
+            if (player && info.source !== 'bleed' && info.source !== 'poison') {
+                player.incrementCombo();
+                this.game.runStats.damage += amount;
+                const ls = (player.stats.lifesteal || 0) + WeaponTraits.weaponLifesteal(player.weapon);
+                if (ls > 0) player.heal(amount * ls);
+            }
+            this._hitStop(0.04);
+            return;
+        }
+
         enemy.takeDamage(amount, info);
         const player = this.game.player;
         if (info.fromPlayer && player) {
@@ -176,7 +203,36 @@ export class CombatSystem {
     }
 
     applyDamageToPlayer(amount, source) {
-        const p = this.game.player;
+        const game = this.game;
+        // Multiplayer host: enemies can hit any party member. Pick the closest
+        // and either apply locally (if it's us) or send a targeted enemy_attack.
+        if (game.netMode === 'host' && source && source.position) {
+            const candidates = [];
+            if (game.player) {
+                candidates.push({ pid: game.net.pid, pos: game.player.position, isLocal: true });
+            }
+            for (const rp of game.remotePlayers.values()) {
+                candidates.push({ pid: rp.pid, pos: rp.position, isLocal: false });
+            }
+            if (candidates.length > 1) {
+                let best = candidates[0];
+                let bestD = best.pos.distanceTo(source.position);
+                for (let i = 1; i < candidates.length; i++) {
+                    const d = candidates[i].pos.distanceTo(source.position);
+                    if (d < bestD) { best = candidates[i]; bestD = d; }
+                }
+                if (!best.isLocal) {
+                    game.net.send('enemy_attack', {
+                        target_pid: best.pid,
+                        dmg: amount,
+                        from: source.name || 'enemy',
+                    }, best.pid);
+                    return;
+                }
+            }
+        }
+
+        const p = game.player;
         if (!p) return;
         if (p.invuln > 0) return;
         p.takeDamage(amount, source);

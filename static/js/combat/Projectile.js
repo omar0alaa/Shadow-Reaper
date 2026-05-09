@@ -19,6 +19,9 @@ export class Projectile {
         this.kind = opts.kind || 'arrow';
         this.pierce = !!opts.pierce;
         this.ricochet = opts.ricochet || 0;
+        // Ghost: visual-only copy of a remote player's projectile. Travels but
+        // does not apply damage (the originating client owns hit detection).
+        this.ghost = !!opts.ghost;
         this.dead = false;
         this._hits = new Set();
 
@@ -55,6 +58,20 @@ export class Projectile {
         // Trail
         if (Math.random() < 0.7) {
             this.game.particles.spawnSmall(this.position, this.color, 0.8);
+        }
+
+        // Ghost projectiles only travel — no hit checks, no wall break.
+        if (this.ghost) {
+            this.mesh.position.copy(this.position);
+            if (this.kind !== 'wave') {
+                const q = new THREE.Quaternion();
+                const up = new THREE.Vector3(0, 1, 0);
+                q.setFromUnitVectors(up, this.direction);
+                this.mesh.quaternion.copy(q);
+            } else {
+                this.mesh.rotation.z += dt * 4;
+            }
+            return;
         }
 
         // Hit checks

@@ -71,11 +71,89 @@
             <p class="subtitle">A dark fantasy roguelike</p>
             <div class="menuButtons">
                 <button class="menuBtn" id="btnNewRun">New Run</button>
+                <button class="menuBtn" id="btnMultiplayer">Multiplayer</button>
                 <button class="menuBtn" id="btnContinue">Continue</button>
                 <button class="menuBtn" id="btnSettings">Settings</button>
                 <button class="menuBtn" id="btnQuit">Quit</button>
             </div>
             <div class="menuFooter">WASD move · Mouse look · LMB attack · Q/E/R/F skills · Tab inventory · Esc pause</div>
+        </div>
+
+        <!-- Multiplayer: mode select -->
+        <div id="mpModeScreen" class="screen hidden">
+            <h2 class="upTitle">MULTIPLAYER</h2>
+            <div class="mpModeRow">
+                <button class="menuBtn mpHostBig" id="mpHostBtn">Host Party</button>
+                <button class="menuBtn mpJoinBig" id="mpJoinBtn">Join Party</button>
+            </div>
+            <button class="menuBtn" id="mpBack" style="margin-top:24px;background:rgba(255,255,255,0.05)">Back</button>
+        </div>
+
+        <!-- Multiplayer: host config -->
+        <div id="mpHostScreen" class="screen hidden">
+            <h2 class="upTitle">HOST PARTY</h2>
+            <div class="mpForm">
+                <label>Display name</label>
+                <input type="text" id="mpHostName" maxlength="20" />
+                <label>Difficulty</label>
+                <div class="diffRow">
+                    <button class="diffBtn" id="mpHostDiff_easy">Easy</button>
+                    <button class="diffBtn" id="mpHostDiff_normal">Normal</button>
+                    <button class="diffBtn" id="mpHostDiff_hard">Hard</button>
+                </div>
+                <label>Your class</label>
+                <div id="mpHostClasses" class="mpClassRow"></div>
+            </div>
+            <div class="modalBtns" style="gap:10px">
+                <button class="menuBtn" id="mpHostBack" style="background:rgba(255,255,255,0.05)">Back</button>
+                <button class="menuBtn" id="mpHostConfirm">Create Party</button>
+            </div>
+        </div>
+
+        <!-- Multiplayer: join config -->
+        <div id="mpJoinScreen" class="screen hidden">
+            <h2 class="upTitle">JOIN PARTY</h2>
+            <div class="mpForm">
+                <label>Party code</label>
+                <input type="text" id="mpJoinCode" maxlength="6" placeholder="XXXXX" />
+                <label>Display name</label>
+                <input type="text" id="mpJoinName" maxlength="20" />
+                <label>Your class</label>
+                <div id="mpJoinClasses" class="mpClassRow"></div>
+            </div>
+            <div class="modalBtns" style="gap:10px">
+                <button class="menuBtn" id="mpJoinBack" style="background:rgba(255,255,255,0.05)">Back</button>
+                <button class="menuBtn" id="mpJoinConfirm">Join</button>
+            </div>
+        </div>
+
+        <!-- Multiplayer: lobby -->
+        <div id="mpLobbyScreen" class="screen hidden">
+            <h2 class="upTitle">PARTY LOBBY</h2>
+            <div class="mpLobbyTop">
+                <div>Code: <b id="mpLobbyCode">—</b></div>
+                <div>Members: <b id="mpLobbyCount">1 / 5</b></div>
+            </div>
+            <div id="mpLobbyList" class="mpLobbyList"></div>
+
+            <div class="mpLobbySwap">
+                <div class="mpLabel">Swap class</div>
+                <div id="mpLobbyClassSwap" class="mpClassSwap"></div>
+            </div>
+
+            <div class="mpLobbySwap">
+                <div class="mpLabel">Difficulty (host only)</div>
+                <div class="diffRow">
+                    <button class="diffBtn" id="mpLobbyDiff_easy">Easy</button>
+                    <button class="diffBtn" id="mpLobbyDiff_normal">Normal</button>
+                    <button class="diffBtn" id="mpLobbyDiff_hard">Hard</button>
+                </div>
+            </div>
+
+            <div class="modalBtns" style="gap:10px">
+                <button class="menuBtn" id="mpLobbyLeave" style="background:rgba(255,255,255,0.05)">Leave</button>
+                <button class="menuBtn" id="mpLobbyStart">Start Run</button>
+            </div>
         </div>
 
         <!-- Difficulty modal -->
