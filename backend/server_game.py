@@ -142,14 +142,26 @@ class ServerGame:
     def add_player(self, pid: str, name: str, cls: str):
         if pid in self.players: return
         sp = ServerPlayer(pid, name, cls)
-        sp.x = 0; sp.z = 0
-        self.players[pid] = sp
+        # Spawn near the centre, offset based on current party size so they
+        # don't pile on top of an existing player.
+        n = max(1, len(self.players) + 1)
+        ang = ((len(self.players)) / n) * math.pi * 2
+        sp.x = math.cos(ang) * 2.0
+        sp.z = math.sin(ang) * 2.0
+        sp.facing = ang
+        sp.spawn_x = sp.x
+        sp.spawn_z = sp.z
+        self.players[sp.pid] = sp
 
     def remove_player(self, pid: str):
         self.players.pop(pid, None)
         # If everyone left, end run.
         if not self.players:
             self.run_ended = True
+
+    def host_abandon(self):
+        """Host requested the run end. Same flow as everyone-dying, but tagged."""
+        self._end_run(reason='host_abandoned')
 
     def on_input(self, pid: str, msg: dict):
         sp = self.players.get(pid)
@@ -557,7 +569,7 @@ class ServerGame:
         if not any(p.alive for p in self.players.values()):
             self._end_run()
 
-    def _end_run(self):
+    def _end_run(self, reason: str = 'all_dead'):
         if self.run_ended: return
         self.run_ended = True
         self.run_summary = {
@@ -565,7 +577,7 @@ class ServerGame:
             'enemies_killed': 0,    # we don't track per-player kill counts on server
             'damage_dealt': 0,
         }
-        self.broadcast({'type': 'run_ended', 'reason': 'all_dead',
+        self.broadcast({'type': 'run_ended', 'reason': reason,
                         'summary': self.run_summary})
         # Notify the party layer so it can reset and invite players to restart.
         if self.on_run_ended_fn:

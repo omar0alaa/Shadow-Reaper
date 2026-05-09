@@ -520,13 +520,53 @@ export class Game {
     }
 
     quitRun() {
-        // abandon → menu
+        // Multiplayer branch:
+        //   • Host  → tell the server to end the run; everyone returns to lobby.
+        //   • Peer  → leave the party entirely and return to the main menu.
+        if (this.netMode === 'mp') {
+            document.getElementById('pauseScreen').classList.add('hidden');
+            if (this.net.isHost) {
+                this.net.send('abandon_run');
+                // Server will broadcast run_ended + return_to_lobby to everyone.
+                // We'll be put back in the lobby alongside our peers.
+            } else {
+                this._mpBackToMenu();
+            }
+            return;
+        }
+        // Single-player → save and back to menu.
         this.persistRun();
         this.audio.stopAmbient();
         document.getElementById('hud').classList.add('hidden');
         document.getElementById('pauseScreen').classList.add('hidden');
         document.getElementById('mainMenu').classList.remove('hidden');
         this.state = 'menu';
+    }
+
+    /** Peer-side abandon: leave the party and return to the main menu. */
+    _mpBackToMenu() {
+        this.input.releaseLock();
+        this.audio.stopAmbient();
+        this._cleanMPPuppets();
+        if (this.arena) { this.arena.dispose(); this.arena = null; }
+        if (this.player) { this.player.dispose(); this.player = null; }
+        for (const e of this.enemies) e.dispose();
+        this.enemies = [];
+        for (const p of this.projectiles) p.dispose();
+        this.projectiles = [];
+        for (const l of this.lootDrops) l.dispose && l.dispose();
+        this.lootDrops = [];
+        this.scene.setUltimatePost(false);
+        this.hud.hideBoss();
+        this.timeScale = 1.0; this.enemyTimeScale = 1.0; this.hitstopTimer = 0;
+        this.net.leave();
+        this.netMode = 'sp';
+        this.state = 'menu';
+        document.getElementById('hud').classList.add('hidden');
+        document.getElementById('pauseScreen').classList.add('hidden');
+        document.getElementById('upgradeScreen').classList.add('hidden');
+        document.getElementById('weaponDropScreen').classList.add('hidden');
+        document.getElementById('mainMenu').classList.remove('hidden');
     }
 
     // ---------- multiplayer (server-authoritative) ----------
@@ -719,6 +759,13 @@ export class Game {
     /** Apply a `state` snapshot from the server. Drives all entity positions. */
     _applyServerState(msg) {
         if (this.netMode !== 'mp') return;
+
+        // Sync wave/active flags so late-joiners (and post-revive players)
+        // see the right HUD banner without waiting for the next wave_start.
+        if (msg.wave !== undefined && msg.wave !== this.wave) {
+            this.wave = msg.wave;
+        }
+        if (msg.wave_active !== undefined) this.waveActive = !!msg.wave_active;
 
         // Players
         const seenPids = new Set();
@@ -1095,9 +1142,28 @@ export class Game {
                 // Capture just-pressed buttons for the next input packet.
                 if (this.input.mouse.lmbJust) this._lmbJustSend = true;
                 if (this.input.mouse.rmbJust) this._rmbJustSend = true;
-                if (this.input.pressed('KeyQ') || this.input.pressed('Space')) this._qJustSend = true;
-                if (this.input.pressed('KeyE')) this._eJustSend = true;
-                if (this.input.pressed('KeyR')) this._rJustSend = true;
+                if (this.input.pressed('KeyQ') || this.input.pressed('Space')) {
+                    this._qJustSend = true;
+                    // Predict the cooldown so the HUD sweep starts the moment
+                    // we press, not when the next snapshot arrives. The
+                    // server's value will take over via _serverApply.
+                    if (this.player && this.player.skills && this.player.skills.Q.cd <= 0
+                        && this.player.stamina >= 18) {
+                        this.player.skills.Q.cd = this.player.skills.Q.maxCd;
+                    }
+                }
+                if (this.input.pressed('KeyE')) {
+                    this._eJustSend = true;
+                    if (this.player && this.player.skills && this.player.skills.E.cd <= 0) {
+                        this.player.skills.E.cd = this.player.skills.E.maxCd;
+                    }
+                }
+                if (this.input.pressed('KeyR')) {
+                    this._rJustSend = true;
+                    if (this.player && this.player.skills && this.player.skills.R.cd <= 0) {
+                        this.player.skills.R.cd = this.player.skills.R.maxCd;
+                    }
+                }
                 if (this.input.pressed('KeyF')) this._fJustSend = true;
                 // Update local player (camera + mouse only — server moves us).
                 this.player.update(dt, rawDt, this.input);

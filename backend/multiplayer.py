@@ -51,8 +51,6 @@ class Party:
 
     def add(self, pid: str, name: str, cls: str) -> bool:
         with self.lock:
-            if self.started:
-                return False
             if len(self.members) >= MAX_MEMBERS:
                 return False
             if cls not in WEAPON_CLASSES:
@@ -184,8 +182,6 @@ def register_party_routes(app, sock, api_bp):
         party = get_party(code)
         if not party:
             return jsonify({"ok": False, "error": "party not found"}), 404
-        if party.started:
-            return jsonify({"ok": False, "error": "run already started"}), 409
         if len(party.members) >= MAX_MEMBERS:
             return jsonify({"ok": False, "error": "party full"}), 409
         pid = secrets.token_hex(8)
@@ -199,6 +195,7 @@ def register_party_routes(app, sock, api_bp):
             "difficulty": party.difficulty,
             "seed": party.seed,
             "members": party.serialize_members(),
+            "started": party.started,
         })
 
     @api_bp.route("/party/info/<code>", methods=["GET"])
@@ -238,6 +235,28 @@ def register_party_routes(app, sock, api_bp):
             "difficulty": party.difficulty,
             "started": party.started,
         })
+
+        # Late-join: if the run is already in progress, drop this player into
+        # the running game and tell only them to start their client up.
+        if party.started and party.game is not None and not party.game.run_ended:
+            info = party.members.get(pid, {})
+            try:
+                party.game.add_player(pid, info.get("name", "Player"),
+                                      info.get("class", "sword"))
+            except Exception as e:
+                print(f"[party {party.code}] late add_player error:", e)
+            members = [
+                {'pid': p, 'name': mi['name'], 'class': mi['class']}
+                for p, mi in party.members.items()
+            ]
+            party.send_to(pid, {
+                "type": "start_run",
+                "seed": party.seed,
+                "difficulty": party.difficulty,
+                "members": party.serialize_members(),
+                "host_pid": party.host_pid,
+                "late_join": True,
+            })
 
         try:
             while True:
@@ -281,6 +300,14 @@ def register_party_routes(app, sock, api_bp):
                     continue
 
                 if t == "start_run" and pid == party.host_pid:
+                    # Force-clean any lingering game from a previous run so
+                    # we don't re-use a stopped tick thread.
+                    if party.game is not None:
+                        try:
+                            party.game.stop()
+                        except Exception:
+                            pass
+                        party.game = None
                     party.started = True
                     party.seed = secrets.randbelow(2**31)  # new seed each run
                     members = [
@@ -314,19 +341,24 @@ def register_party_routes(app, sock, api_bp):
                         })
                         p.broadcast({"type": "return_to_lobby"})
 
-                    # Then spin up the authoritative game (which will broadcast
-                    # wave_start as part of _begin_wave). Clients are already
-                    # in startNewRunMP by now.
-                    if party.game is None:
-                        party.game = ServerGame(
-                            party.code, members, party.seed, party.difficulty,
-                            broadcast_fn=lambda m, p=party: p.broadcast(m),
-                            send_to_fn=lambda pid_, m, p=party: p.send_to(pid_, m),
-                            on_run_ended_fn=_on_run_ended,
-                        )
-                        # Small grace period so the start_run JSON has time to
-                        # hit the wire / clients can finish their first awaits.
-                        threading.Timer(0.4, party.game.start).start()
+                    party.game = ServerGame(
+                        party.code, members, party.seed, party.difficulty,
+                        broadcast_fn=lambda m, p=party: p.broadcast(m),
+                        send_to_fn=lambda pid_, m, p=party: p.send_to(pid_, m),
+                        on_run_ended_fn=_on_run_ended,
+                    )
+                    # Small grace period so the start_run JSON has time to
+                    # hit the wire / clients can finish their first awaits.
+                    threading.Timer(0.4, party.game.start).start()
+                    continue
+
+                if t == "abandon_run" and pid == party.host_pid:
+                    # Host explicitly abandoned the run — end it for everyone.
+                    if party.game is not None and not party.game.run_ended:
+                        try:
+                            party.game.host_abandon()
+                        except Exception as e:
+                            print(f"[party {party.code}] abandon_run error:", e)
                     continue
 
                 # Server-authoritative game messages

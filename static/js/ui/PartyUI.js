@@ -163,8 +163,16 @@ export class PartyUI {
             this.game.hud.toast('Enter a party code'); return;
         }
         try {
-            await this.game.net.joinParty({ code, name, cls: this._joinClass });
-            this._enterLobby();
+            const d = await this.game.net.joinParty({ code, name, cls: this._joinClass });
+            if (d && d.started) {
+                // Mid-game join: register handlers, skip the lobby flash.
+                // Server will follow up with a start_run message addressed to us.
+                this._closeAll();
+                this._wireLobbyHandlers();
+                this.game.hud.toast('Joining run in progress...');
+            } else {
+                this._enterLobby();
+            }
         } catch (e) {
             this.game.hud.toast('Join failed: ' + (e.message || e));
         }
@@ -200,14 +208,25 @@ export class PartyUI {
             }
         };
         this._renderLobby();
+        this._wireLobbyHandlers();
+        this.lobbyScreen.classList.remove('hidden');
+    }
+
+    /** Register the network handlers used by both the lobby and mid-game joins. */
+    _wireLobbyHandlers() {
         this.game.net.on('lobby_update', (msg) => this._renderLobby());
         this.game.net.on('start_run', (msg) => this._onStartRun(msg));
         this.game.net.on('disconnect', () => {
             this.game.hud.toast('Disconnected from party');
             this._closeAll();
-            this.show();
+            // If we were already in a live MP run, run the in-game cleanup;
+            // otherwise just bounce back to the main menu.
+            if (this.game.player && this.game.netMode === 'mp') {
+                this.game._endMP();
+            } else {
+                this._returnToMainMenu();
+            }
         });
-        this.lobbyScreen.classList.remove('hidden');
     }
 
     _renderLobby() {

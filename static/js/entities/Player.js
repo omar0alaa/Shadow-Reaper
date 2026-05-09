@@ -370,11 +370,22 @@ export class Player {
         this.invuln = ps.inv ? 0.1 : 0;
         if (ps.combo !== undefined) this.comboCount = ps.combo;
 
-        // Cooldowns — drive the HUD's radial sweep.
+        // Cooldowns — drive the HUD's radial sweep. Take max(server, local) so
+        // a press we just predicted isn't snapped to 0 by a stale snapshot;
+        // the local-tick in update() keeps it decaying smoothly.
         if (this.skills) {
-            if (ps.cdQ !== undefined) this.skills.Q.cd = ps.cdQ;
-            if (ps.cdE !== undefined) this.skills.E.cd = ps.cdE;
-            if (ps.cdR !== undefined) this.skills.R.cd = ps.cdR;
+            if (ps.cdQ !== undefined) {
+                const sv = Number(ps.cdQ) || 0;
+                this.skills.Q.cd = Math.max(sv, this.skills.Q.cd);
+            }
+            if (ps.cdE !== undefined) {
+                const sv = Number(ps.cdE) || 0;
+                this.skills.E.cd = Math.max(sv, this.skills.E.cd);
+            }
+            if (ps.cdR !== undefined) {
+                const sv = Number(ps.cdR) || 0;
+                this.skills.R.cd = Math.max(sv, this.skills.R.cd);
+            }
             // Reaper Time / F is energy-gated; energy is updated above.
         }
 
@@ -475,6 +486,15 @@ export class Player {
 
             // Tick the local swing-animation timer set by _serverApply.
             if (this.attackTimer > 0) this.attackTimer -= rawDt;
+
+            // Tick skill cooldowns locally between snapshots so the HUD sweep
+            // visually decays smoothly. Server values overwrite on each
+            // snapshot via _serverApply.
+            if (this.skills) {
+                if (this.skills.Q.cd > 0) this.skills.Q.cd = Math.max(0, this.skills.Q.cd - rawDt);
+                if (this.skills.E.cd > 0) this.skills.E.cd = Math.max(0, this.skills.E.cd - rawDt);
+                if (this.skills.R.cd > 0) this.skills.R.cd = Math.max(0, this.skills.R.cd - rawDt);
+            }
 
             // Class-specific weapon-swing animation (mirrors the SP path).
             if (this.attackTimer > 0) {
